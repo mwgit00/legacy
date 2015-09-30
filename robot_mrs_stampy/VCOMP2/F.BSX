@@ -1,0 +1,4 @@
+
+more:
+	debug dec in0, dec in1, cr
+goto more

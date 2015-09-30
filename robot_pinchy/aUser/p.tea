@@ -1,0 +1,308 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aDig.tea>
+#include <aA2D.tea>
+#include <aMulti.tea>
+#include <aMath.tea>
+#include <aSRF08.tea>
+
+#include "pmo.tea"
+#include "paux.tea"
+
+#define THR_RS_OBSTACLE     18
+#define THR_HUG             200 // too low and we see floor
+#define THR_EDGE            340
+
+#define V_SKOOCH            6
+#define V_HUG1              10
+#define V_ROT1              5
+#define V_SCOOP             5
+
+#define ANG_SCOOP           30
+
+#define CT_STALL            20
+
+
+
+void init()
+{
+    // be sure we are stopped
+    moEnableWheels(X_OFF);
+
+    // elbow should be off
+    // but claw should be open so it won't block camera
+    moEnableElbow(X_OFF);
+    moEnableClaws(X_ENA);
+
+    // set internal HB
+    aCore_Outportc(aPortHBMode, 1);
+
+    // set 100KHz IIC baud
+    aCore_Outportc(aPortIICBaud, 0);
+    
+    // set up buzzer digital output (default is input)
+    aDig_Config(DIG_BUZZER, ADIG_OUTPUT);
+    
+    // launch beacon server (file 0, process 1)
+    aMulti_Spawn(0, 1);
+
+    // courtesy
+    beep(3);
+    
+    // judge will push button
+    waitForButton();
+
+    // 2 beeps and fast HB to signal we're on our way
+    beep(2);
+    aCore_Outportc(aPortHBRate, 5);
+
+    // then arm must be raised so we clear everything
+    moEnableElbow(X_ENA);
+    moMoveElbow(ELBOW_UP);
+}
+
+
+
+void skooch(int v)
+{
+    int k;
+
+    // ready to go
+    moEnableWheels(X_ENA);
+    
+    // if edge sensor does not see table
+    // then start skooch forward until table seen
+
+    k = 0;
+    while(1)
+    {
+        k = debounce(k, isgt(auxMedianA2D(A2D_EDGE), THR_EDGE));
+        if (k == 3) break;
+        // servos aren't balanced
+        moGo(6,7);
+    }
+
+    moGo(0, 0);
+}
+
+
+
+void timedScoot(int vL, int vR, int t)
+{
+    moEnableWheels(X_ENA);
+    moGo(vL, vR);
+    aCore_Sleep(t);
+    moGo(0, 0);
+}
+
+
+
+void zug(int v, int sign, unsigned char rSide, unsigned char bSide, char mode)
+{
+    int rs;
+    int code = 0;
+    
+    int x0 = 0;
+    int ct = CT_STALL;
+    char foo = 0;
+
+    int err;
+    int vL = sign * (-v);
+    int vR = sign * (v);
+    
+    moEnableWheels(X_ENA);
+    
+    // restart beacon server based on mode
+    if (mode == 1)
+    {
+        aPad_WriteChar(PAD_FLAG, 0);
+        aMulti_Signal(1, bSide);
+    }
+    
+    while (1)
+    {
+        // done if we found a beacon or the home circle
+        if (mode == 1)
+        {
+            // found beacon
+            if (aPad_ReadChar(PAD_FLAG))
+            {
+                code = 2;
+                break;
+            }
+        }
+        else
+        {
+            // found home circle
+            if (islt(aA2D_ReadInt(A2D_HOME), 512)) // FIXME -- need isgt at contest!!!
+            {
+                code = 3;
+                break;
+            }
+        }
+
+        // update stall check
+        x0 = aA2D_ReadInt(A2D_STALL);
+        if ((x0 > 212) && (foo == 1)) { ct = CT_STALL; foo = 0; }
+        if ((x0 < 146) && (foo == 0)) { ct = CT_STALL; foo = 1; }
+        ct--;
+        
+        // get a sonar reading
+        rs = aSRF08_RangeInt((unsigned char)SX, aSRF08_CM);
+
+        // then check stall, sonar, hug sensor (order matters!!!)
+        if (ct == 0)
+        {
+            // stuck on something
+            // back up and rotate away
+            moGo(-v, -v);
+            aCore_Sleep(5000);
+            moGo(vL, vR);
+            aCore_Sleep(4000);
+            ct = CT_STALL;
+        }
+        else if (islt(rs, THR_RS_OBSTACLE))
+        {
+            // if way too close
+            // do a rotate (dir based on hug side)
+            moGo(vL, vR);
+            aCore_Sleep(4000);
+            ct = CT_STALL;
+        }
+        else
+        {
+            // no front obstacle and no beacon
+            // so just do a hug iteration
+            err  = (THR_HUG - aA2D_ReadInt(rSide)) * sign;
+            moGoSteer(err / 5, v);
+        }
+    }
+    
+    // stop and emit diagnostic code
+    // prior to going right into skooch
+    moGo(0, 0); 
+    beep(code);
+}
+
+
+
+void pickUpPlate()
+{
+    // rotate to start position for push
+    rotateRel(-ANG_SCOOP, V_SCOOP);
+    
+    // move arm low with open claw
+    moMoveElbow(ELBOW_TABLE);
+    aCore_Sleep(20000);
+
+    // scoop
+    // (push to align and then pinch)
+    rotateRel(ANG_SCOOP * 2, V_SCOOP);
+    moMoveClaws(CLAWS_GRIP);
+    aCore_Sleep(20000);
+    
+    // lift off table
+    moMoveElbow(ELBOW_UP);
+    aCore_Sleep(20000);
+    
+    // wait for lift to finish
+    // back away
+    // then rotate to align left side with shelf
+    timedScoot(-10, -10, 10000);    
+    rotateRel(90 - ANG_SCOOP, V_SCOOP);    
+}
+
+
+
+void run1()
+{
+    ////////////////////////////////
+    // FROM HOME TO SHELF VIA R HUG
+    ////////////////////////////////
+
+    // hug-seek on right side till we find shelf beacon
+    zug(V_HUG1, 1, A2D_RNG_R, DIG_R_BEACON, 1);
+    
+    // rotate 90 degrees to face shelf
+    rotateRel(90, V_ROT1);
+
+    // open claw to keep at least one gripper from bumping food
+    moMoveClaws(CLAWS_WIDE);
+    aCore_Sleep(10000);
+
+    // get close enough then do sequence to pick up plate
+    skooch(V_SKOOCH);
+    pickUpPlate();
+}
+
+
+
+void run2()
+{
+    ////////////////////////////////
+    // FROM SHELF TO TABLE VIA L HUG
+    ////////////////////////////////
+    
+    // hug-seek on left side till we find a plate beacon
+    zug(V_HUG1, -1, A2D_RNG_L, DIG_L_BEACON, 1);
+
+    rotateRel(-90, V_ROT1);
+    
+    // get close
+    skooch(V_SKOOCH);
+    
+    // lower arm (position not critical)
+    moMoveElbow(ELBOW_TABLE);
+    aCore_Sleep(20000);
+
+    // release plate
+    moMoveClaws(CLAWS_OPEN);
+    aCore_Sleep(20000);
+
+    // (un-push to be sure plate clears claws)
+    rotateRel(-15, V_SCOOP);
+    
+    // raise arm then close claws
+    moMoveElbow(ELBOW_UP);
+    aCore_Sleep(20000);
+    moMoveClaws(CLAWS_GRIP);
+    
+    // back up and we are done
+    timedScoot(-10, -10, 15000);
+}
+
+
+
+void justPickUpPlate()
+{
+    aCore_Sleep(30000);
+    skooch(V_SKOOCH);
+    pickUpPlate();
+}
+    
+
+
+void main()
+{
+    init();
+
+    run1();
+    run2();
+
+    // friendly greeting to human
+    moSalute();
+    
+    // turn into next hug (we're already a bit turned from plate release)
+    rotateRel(-75, V_ROT1);    
+
+    // try to go home (success doesn't matter)
+    zug(V_HUG1, 1, A2D_RNG_R, DIG_R_BEACON, 0);
+    
+    // all done so sit and beep
+    moEnableWheels(X_OFF);
+    while (1)
+    {
+        beep(1);
+        aCore_Sleep(10000);
+    }
+}

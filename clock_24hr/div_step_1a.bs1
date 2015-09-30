@@ -1,0 +1,148 @@
+' {$STAMP BS1}
+' {$PBASIC 1.0}
+
+SYMBOL u1_prev_pin0 = BIT0
+SYMBOL u8_temp = B2
+SYMBOL u16_seconds_count = W2
+SYMBOL u8_step = B6
+SYMBOL u8_user = B7
+SYMBOL u16_weekly_step_ct = W4
+
+SYMBOL c_u8_step_reset = %10000000
+SYMBOL c_u8_step_limit = %00001111
+
+' ticks divisor is week-based to get an integer count
+' 86400 sec-per-day
+' 108 / 14 rev-per-day
+' 20 steps-per-rev
+' (20 * (108 / 14)) * 7 = 1080 steps-per-week
+' (86400 * 7) / 1080 = 560 sec-per-step (9.333 minutes)
+SYMBOL C_SECONDS_PER_STEP = 560
+SYMBOL C_STEPS_PER_WEEK = 1080
+
+
+
+' -----------------------------
+
+SETUP:
+
+  INPUT 0 ' 1sec time-base clock input
+  INPUT 1 ' manual step activation input (active low)
+  INPUT 2 ' unused
+
+  OUTPUT 3 ' alarm
+
+  ' set stepper pins to outputs and turn off
+  OUTPUT 4
+  OUTPUT 5
+  OUTPUT 6
+  OUTPUT 7
+
+  PINS = PINS & %00000000
+
+  ' at power-on the weekly step count is 0
+  u16_weekly_step_ct = 0
+
+  u8_step = c_u8_step_reset
+
+
+' -----------------------------
+
+MAIN_RESTART:
+
+  u1_prev_pin0 = PIN0
+  u16_seconds_count = 0
+  u8_user = 0
+
+
+' -----------------------------
+
+MAIN:
+
+  ' check for user pressing clock override input
+  IF PIN1 = 0 THEN MAIN_MANUAL_CLOCK
+
+  ' check for change on 1-sec clock input
+  IF PIN0 <> u1_prev_pin0 THEN MAIN_DIVIDE_CLOCK
+
+  GOTO MAIN
+
+
+MAIN_DIVIDE_CLOCK:
+
+  ' stash previous state of clock pin
+  u1_prev_pin0 = PIN0
+
+  ' count seconds and check for rollover
+  u16_seconds_count = u16_seconds_count + 1
+  IF u16_seconds_count < C_SECONDS_PER_STEP THEN MAIN
+  u16_seconds_count = 0
+
+  ' do one step and check for weekly step count that matches an alarm time
+  GOSUB SR_STEP
+  u8_temp = 255 ' initialize as not found
+  LOOKDOWN u16_weekly_step_ct, (0, 154, 309, 463, 617, 771, 926), u8_temp
+  IF u8_temp = 255 THEN MAIN_DIVIDE_CLOCK_NO_ALARM
+  HIGH 3 ' count matches an alarm time so activate alarm
+  GOTO main
+
+MAIN_DIVIDE_CLOCK_NO_ALARM:
+
+  LOW 3 ' count did not match an alarm time so make sure it's off
+  GOTO MAIN
+
+
+
+MAIN_MANUAL_CLOCK:
+
+  GOSUB SR_STEP
+
+  ' after a few ticks the loop will be speeded up
+  IF u8_user = 5 THEN MAIN_MANUAL_CLOCK_LOOP
+  u8_user = u8_user + 1
+  PAUSE 1000
+
+MAIN_MANUAL_CLOCK_LOOP:
+
+  PAUSE 20
+  IF PIN1 = 0 THEN MAIN_MANUAL_CLOCK
+
+  ' user is no longer pressing button so reset main loop
+  GOTO MAIN_RESTART
+
+
+
+' -----------------------------
+SR_STEP:
+
+  ' advance weekly step count
+  ' check for weekly rollover
+  u16_weekly_step_ct = u16_weekly_step_ct + 1
+  IF u16_weekly_step_ct < C_STEPS_PER_WEEK THEN SR_STEP_MOVE
+  u16_weekly_step_ct = 0
+
+SR_STEP_MOVE:
+
+  ' activate coil
+  PINS = u8_step
+  'DEBUG PINS
+  PAUSE 80
+
+  ' then be sure all coils are off
+  PINS = %00000000
+  'DEBUG PINS
+
+  ' advance step counter for next coil activation, i.e.
+  ' 1000
+  ' 0100
+  ' 0010
+  ' 0001
+  ' repeat
+
+  u8_step = u8_step / 2
+  IF u8_step > c_u8_step_limit THEN SR_STEP_RETURN
+  u8_step = c_u8_step_reset
+
+SR_STEP_RETURN:
+
+  RETURN

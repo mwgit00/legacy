@@ -1,0 +1,29 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aDig.tea>
+#include <aA2D.tea>
+#include <aMulti.tea>
+#include <aMath.tea>
+#include <aSRF08.tea>
+
+#include "pmo.tea"
+#include "paux.tea"
+
+// file 8
+
+void main()
+{
+    // set up switch and buzzer digital I/O
+    aDig_Config(DIG_BUTTON, ADIG_INPUT);
+    aDig_Config(DIG_BUZZER, ADIG_OUTPUT);
+    aDig_Config(DIG_L_BEACON, ADIG_INPUT);
+    aDig_Config(DIG_R_BEACON, ADIG_INPUT);
+
+    while(1)
+    {
+        if (aA2D_ReadInt(0) > 512)
+        {
+            beep(1);
+        }
+    }
+}

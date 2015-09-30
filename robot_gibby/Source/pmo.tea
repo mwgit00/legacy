@@ -1,0 +1,81 @@
+#ifndef _PMO_T_
+#define _PMO_T_
+
+#include <aCore.tea>
+#include <aServo.tea>
+
+#include "pdefs.tea"
+
+
+
+void moEnableWheels(unsigned char mask)
+{
+    moGo(0, 0);
+    aServo_SetConfig(X_WHEEL_L, (unsigned char)(X_CFG_WHEEL_L & mask));
+    aServo_SetConfig(X_WHEEL_R, (unsigned char)(X_CFG_WHEEL_R & mask));
+
+    // workaround for old BrainStem GP 1.0 Build 3
+    asm
+    {
+    pushlb 2
+    pushlb 4
+    pushlb 32
+    pushlb X_WHEEL_L
+    pushls X_LMT_WHEEL_L
+    pushlb 6
+    popcmd
+
+    pushlb 2
+    pushlb 4
+    pushlb 32
+    pushlb X_WHEEL_R
+    pushls X_LMT_WHEEL_R
+    pushlb 6
+    popcmd
+    }
+}
+
+
+
+void moGo(int vL, int vR)
+{
+    aServo_SetAbsolute(X_WHEEL_L, (unsigned char)(vL + 128));
+    aServo_SetAbsolute(X_WHEEL_R, (unsigned char)(vR + 128));
+}
+
+
+
+void moGoSteer(int err, int maxv)
+{
+	int vr = maxv;
+	int vl = maxv;
+	int ferr = err;
+	
+	// take abs of err...
+	if (err & 0x8000) // sign bit?
+    {
+        ferr = -err;
+    }
+
+	// then limit it to maxv
+	if (ferr > maxv)
+    {
+        ferr = maxv;
+    }
+	
+	// robot is steered by slowing one wheel
+	// check sign of err to see which wheel gets slowed
+	if (err & 0x8000) // sign bit?
+	{
+		vl = maxv - ferr;
+	}
+	else
+	{
+		vr = maxv - ferr;
+	}
+
+	// apply new speeds
+	moGo(vl, vr);
+}
+
+#endif // _PMO_T_

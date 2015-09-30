@@ -1,0 +1,474 @@
+' FIRE-FIGHTER PROGRAM 5 -- END GAME
+'
+' 1-17-2000 begin
+' 1-30-2000 turning tests
+' 2-07-2000 switched from 90 deg to 180 deg range
+' 2-10-2000 wallhug experiments
+' 2-13-2000 new ankles and tweaked walk
+' 2-15-2000 tried head head-start for walk
+' 3-02-2000 tested fan motor activation
+' 3-04-2000 candle tests
+' 3-05-2000 upgrade to BS2-SX
+' 4-05-2000 candle tracking walk
+
+
+' variables
+
+i	var	byte
+k	var	byte
+x	var	byte
+pos1	var	byte
+pos2	var	byte
+pos3	var	byte
+posh	var	byte
+irw	var	byte	' prox wall checker
+irf	var	byte	' prox forward checker
+
+bbak	var	bit
+b90x	var	bit	' inhibit bit for 90 degree wall-hug turns
+wlok	var	bit	' white line detected
+fcok	var	bit	' found candle ok
+
+ww	var	word	' white line detection output
+wmax	var	word	' dynamic white-line max value
+wmin	var	word	' dynamic white-line min value
+
+
+' beep stuff
+
+beep	con	12
+beepgnd	con	13
+
+
+' fire-fighting
+
+fanmtr	con	11	' fan relay output
+ifuze	con	0	' candle proximity fuze input
+iseek	con	1	' candle direction sensor input
+fsweep	con	80	' +- range for candle scan
+fswptm	con	20'25'30	' sweep step delay time
+fswbak	con	30	' amount to swing back before fan on
+
+
+' servo control parameters
+
+sync	con	255
+ssc2	con	7	' pin 7 (use another pin to disable servos)
+svo	con	0
+n96n	con	16624	' BS2-SX
+
+
+
+' body servo IDs
+
+svhead	con	3
+svlank	con	0
+svrank	con	7
+svlhip	con	1
+svrhip	con	6
+
+
+
+' body home positions
+
+hmhead	con	132	'
+hmlank	con	121	'
+hmrank	con	139	'
+hmlhip	con	127	'
+hmrhip	con	122	'
+hmhipd	con	5	' left hip home is 5 more than right hip home
+
+
+
+' walking parameters
+
+tshift	con	120'60	' time for weight shift before hip lift
+thipup	con	50	' time for hip lift before ankle push
+tankmv	con	120'100	' time for ankle push before weight shift back
+thipdn	con	0	' time for shift before hips drop
+tfinal	con	450'430'400	' time to complete weight shift back
+
+jwhead	con	100'75	' balancing offset for head
+jwhips	con	18	' offset for raising hips
+jwanks	con	30	' offset for normal step
+
+jwankb	con	30	' offset for backward step
+jwhipb	con	18	' offset for backward raising hips
+
+crvmax	con	8
+
+nspd	var	nib	' speed selector
+btshft	var	byte
+wtdone	var	word
+bhoffs	var	byte
+
+brankd	var	byte	' right ankle turning offset
+blankd	var	byte	' left ankle turning offset
+brankx	var	byte	' right ankle step offset
+blankx	var	byte	' left ankle step offset
+
+
+
+'-----------------------------------------------
+
+low	beepgnd
+
+begin:
+
+
+
+fire_walk:
+
+	gosub sr_find_candle
+	if fcok then fire_turn
+	brankx=jwanks
+	blankx=jwanks
+	for i=1 to 2
+
+		ex_hug_loop_start:
+
+		gosub sr_prox_w
+		gosub sr_hugcalc
+		gosub sr_setwalk
+		gosub sr_lbstep
+		if wlok=1 and i>3 then ex_hug_done
+		gosub sr_prox_f
+		if irf<131 then ex_hug_1
+			gosub sr_attenb
+			ww.lowbyte=blankd
+			blankd=45
+			gosub sr_rotrbstep
+			gosub sr_rotlbstep
+			blankd=ww.lowbyte
+			brankx=jwanks
+			blankx=jwanks
+			goto ex_hug_loop_start
+		ex_hug_1:
+
+		gosub sr_prox_w
+		gosub sr_hugcalc
+		gosub sr_setwalk
+		gosub sr_rbstep
+		if wlok=1 and i>3 then ex_hug_done
+		gosub sr_prox_f
+		if irf<131 then ex_hug_2
+			gosub sr_attenb
+			ww.lowbyte=blankd
+			blankd=45
+			gosub sr_rotrbstep
+			gosub sr_rotlbstep
+			blankd=ww.lowbyte
+			brankx=jwanks
+			blankx=jwanks
+			goto ex_hug_loop_start
+		ex_hug_2:
+	next
+	ex_hug_done:
+	gosub sr_atten
+	goto fire_walk
+
+fire_turn:
+
+	if pos1<(hmhead+15) and pos1>(hmhead-15) then fire_turn_done
+	if pos1<hmhead then fire_turn_r
+	fire_turn_l:
+		blankd=pos1-hmhead
+		ww=blankd*3/5
+		blankd=ww.lowbyte
+		gosub sr_rotrbstep
+		gosub sr_rotlbstep
+		goto fire_turn_done
+	fire_turn_r:
+		brankd=hmhead-pos1
+		ww=brankd*3/5
+		brankd=ww.lowbyte
+		gosub sr_rotlbstep
+		gosub sr_rotrbstep
+		goto fire_turn_done
+
+	fire_turn_done:
+
+	' initialize tracking walk
+	nspd=0
+	gosub sr_setwalk
+	goto sr_track
+
+end
+
+
+
+
+
+'-----------------------------------------------------------------
+
+sr_find_candle:
+	'
+	' head left, slow sweep left to right, back to center
+	' stop sweep and set flag if candle detected
+	'
+	fcok=0
+	for pos1=hmhead to hmhead+fsweep
+		serout ssc2,n96n,[sync,svhead,pos1]
+		pause 1
+	next
+	for pos1=hmhead+fsweep to hmhead-fsweep
+		pause fswptm+10
+		if in0=1 then sr_fan
+		if in1=1 then sr_find_candle_ok
+		serout ssc2,n96n,[sync,svhead,pos1]
+	next
+	goto sr_find_candle_done
+	sr_find_candle_ok:
+		fcok=1
+		freqout beep,200,600
+	sr_find_candle_done:
+		for pos2=pos1 to hmhead
+			serout ssc2,n96n,[sync,svhead,pos2]
+			pause 1
+		next
+		pause 100
+	return
+
+
+
+sr_prox_w:
+	low 6
+	sr_prox_w_wait:
+		if in8=0 then sr_prox_w_wait
+	shiftin 8,6,MSBPOST,[irw\8]
+	high 6
+return
+
+sr_prox_f:
+	low 10
+	sr_prox_f_wait:
+		if in9=0 then sr_prox_f_wait
+	shiftin 9,10,MSBPOST,[irf\8]
+	high 10
+return
+
+
+
+sr_hugcalc:
+
+lookdown irw,>=[74,0],nspd
+
+'lookdown irw,<=[ 75, 83, 96,105,110,114,121,127,136,142,155,183,255],x
+'lookdown irw,<=[ 72, 81, 90, 99,102,105,110,114,121,127,136,155,255],x
+lookdown irw,<=[ 68, 77, 86, 93, 96, 99,102,105,110,114,121,136,255],x
+'lookdown irw,<=[ 64, 73, 82, 88, 90, 93, 96, 99,102,105,110,121,255],x
+lookup x,      [  0,  0,  0,  0,  0,  0,  0,  0,  5, 10, 15, 20, 20],blankd
+lookup x,      [ 56, 34, 25, 20, 15, 10,  5,  0,  0,  0,  0,  0,  0],brankd
+
+return
+
+
+sr_setwalk:
+	lookup nspd,[70,130],btshft
+	lookup nspd,[550,650],wtdone
+'	lookup nspd,[450,550],wtdone
+	lookup nspd,[80,105],bhoffs
+'	lookup nspd,[60,120],btshft
+'	lookup nspd,[350,450],wtdone
+'	lookup nspd,[75,100],bhoffs
+	return
+
+
+
+sr_attenb:
+	'
+	' square up after walking with one backward step
+	'
+	brankx=0
+	blankx=0
+	brankd=0
+	blankd=0
+	get 11,x
+	if x=0 then sr_attenb_r
+		gosub sr_rbstep
+		return
+	sr_attenb_r:
+		gosub sr_lbstep
+		return
+
+
+sr_atten:
+	'
+	' square up after walking with one forward step
+	'
+	brankx=0
+	blankx=0
+	brankd=0
+	blankd=0
+	get 11,x
+	if x=0 then sr_atten_r
+		gosub sr_lbstep
+		return
+	sr_atten_r:
+		gosub sr_rbstep
+		return
+
+
+sr_lbstep:
+	'
+	' LEFT-FOOT BALANCE STEP (WITH RIGHT TURN)
+	' SAMPLE WHITE-LINE OUTPUT DURING ANKLE MOVEMENT
+	'
+	put 11,0
+	serout ssc2,n96n,[sync,svhead,hmhead+bhoffs]
+	pause btshft
+	pos1=hmlhip-jwhips
+	serout ssc2,n96n,[sync,svlhip,pos1,sync,svrhip,pos1-hmhipd]
+	pause thipup
+	pos1=hmlank+blankx
+	pos2=hmrank+brankx+brankd
+	serout ssc2,n96n,[sync,svlank,pos1,sync,svrank,pos2]
+'	gosub sr_sample
+	pause tankmv
+	posh=hmhead-brankx
+'	posh=hmhead-brankx+fsweep
+	serout ssc2,n96n,[sync,svhead,posh]
+	pause thipdn
+	serout ssc2,n96n,[sync,svlhip,hmlhip]
+	serout ssc2,n96n,[sync,svrhip,hmrhip]
+	pause wtdone
+return
+
+
+
+sr_rbstep:
+	'
+	' RIGHT-FOOT BALANCE STEP (WITH LEFT TURN)
+	'
+	put 11,1
+	serout ssc2,n96n,[sync,svhead,hmhead-bhoffs]
+	pause btshft
+	pos1=hmlhip+jwhips
+	serout ssc2,n96n,[sync,svlhip,pos1,sync,svrhip,pos1-hmhipd]
+	pause thipup
+	pos1=hmlank-blankx-blankd
+	pos2=hmrank-brankx
+	serout ssc2,n96n,[sync,svlank,pos1,sync,svrank,pos2]
+'	gosub sr_sample
+	pause tankmv
+	posh=hmhead+blankx
+	serout ssc2,n96n,[sync,svhead,posh]
+	pause thipdn
+	serout ssc2,n96n,[sync,svlhip,hmlhip]
+	serout ssc2,n96n,[sync,svrhip,hmrhip]
+	pause wtdone
+return
+
+
+
+
+
+sr_rotlbstep:
+	pos3=brankd
+	serout ssc2,n96n,[sync,svhead,hmhead+110]
+	pause 350
+	pos1=hmlhip-jwhips
+	serout ssc2,n96n,[sync,svlhip,pos1,sync,svrhip,pos1-hmhipd]
+	pause 100
+	pos1=hmlank-brankd
+	pos2=hmrank+brankd
+	serout ssc2,n96n,[sync,svlank,pos1,sync,svrank,pos2]
+	pause 100
+	pos1=hmlhip
+	serout ssc2,n96n,[sync,svlhip,pos1]
+	serout ssc2,n96n,[sync,svrhip,pos1-hmhipd]
+	pause 300
+	serout ssc2,n96n,[sync,svhead,hmhead-pos3]
+	pause 700
+return
+
+sr_rotrbstep:
+	pos3=blankd
+	serout ssc2,n96n,[sync,svhead,hmhead-110]
+	pause 350
+	pos1=hmlhip+jwhips
+	serout ssc2,n96n,[sync,svlhip,pos1,sync,svrhip,pos1-hmhipd]
+	pause 100
+	pos1=hmlank-blankd
+	pos2=hmrank+blankd
+	serout ssc2,n96n,[sync,svlank,pos1,sync,svrank,pos2]
+	pause 100
+	pos1=hmlhip
+	serout ssc2,n96n,[sync,svlhip,pos1]
+	serout ssc2,n96n,[sync,svrhip,pos1-hmhipd]
+	pause 300
+	serout ssc2,n96n,[sync,svhead,hmhead+pos3]
+	pause 700
+return
+
+
+
+
+
+
+
+
+
+
+
+sr_track:
+	brankx=jwanks-10
+	blankx=jwanks-10
+	for pos1=hmhead to hmhead+fsweep
+		serout ssc2,n96n,[sync,svhead,pos1]
+		pause 1
+	next
+	for pos1=hmhead+fsweep to hmhead-fsweep
+		pause fswptm
+		if in0=1 then sr_fan
+		if in1=1 then sr_track_found
+		serout ssc2,n96n,[sync,svhead,pos1]
+	next
+	'
+	' default is go straight (x=3) when no candle found
+	' a failed scan occurs when pos1<=hmhead-fsweep
+	'
+	x=3
+	if pos1<=(hmhead-fsweep) then sr_track_steer
+	sr_track_found:
+		for pos2=pos1 to hmhead
+			serout ssc2,n96n,[sync,svhead,pos2]
+			pause 1
+		next
+		freqout beep,200,600
+		lookdown pos1,<=[102,117,127,137,147,162,255],x
+	sr_track_steer:
+		lookup x,[ 0,  0,  0,  0,  15, 30, 45],blankd
+		lookup x,[45, 30, 15,   0,  0,  0,  0],brankd
+		branch x,[sr_xlb,sr_xlb,sr_xlb,sr_xlb,sr_xrb,sr_xrb,sr_xrb]
+	sr_xlb:
+		gosub sr_lbstep
+		gosub sr_atten
+		goto sr_track
+	sr_xrb:
+		gosub sr_rbstep
+		gosub sr_atten
+		goto sr_track
+
+sr_fan:
+	'
+	' close enough to blow out the candle so
+	' blow, check, repeat until candle is out
+	'
+	pos2=pos1+fswbak
+	serout ssc2,n96n,[sync,svhead,pos2]
+	ww=3000
+	pause 500
+	sr_fan_rpt:
+		high fanmtr
+		pause ww
+		low fanmtr
+		pause 3000	' see if candle flares up again
+		ww=ww+1000
+		for i=1 to 100
+			if in3=0 then sr_fan_rpt
+			pause 10
+		next
+		sr_fan_SUCCESS:
+		run 7
+		end

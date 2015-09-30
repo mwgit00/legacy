@@ -1,0 +1,120 @@
+#ifndef _MotorLib_T_
+#define _MotorLib_T_
+
+#include <aCore.tea>
+#include <aServo.tea>
+
+
+
+#define X_MOTOR_L           0
+#define X_MOTOR_R   	    1
+#define SERVO_CLAW_L        3
+#define SERVO_CLAW_R        2
+
+#define CLAW_OPEN           128
+#define CLAW_GRIP           212
+#define CLAW_CLOSE          255
+
+
+
+void configServos()
+{
+    aServo_SetLimits(0, 0x1323);
+    aServo_SetLimits(1, 0x1322);
+    aServo_SetLimits(2, 0x1123);
+    aServo_SetLimits(3, 0x1123);
+    aServo_SetConfig(0, 0x4F);
+    aServo_SetConfig(1, 0x0F);
+    aServo_SetConfig(2, (unsigned char)0xCE);
+    aServo_SetConfig(3, (unsigned char)0x8E);
+}
+
+
+
+void enable_arms(char ena)
+{
+    unsigned char cfgL;
+    unsigned char cfgR;
+    cfgL = aServo_GetConfig(SERVO_CLAW_L);
+    cfgR = aServo_GetConfig(SERVO_CLAW_R);
+    if (ena)
+    {
+        // enable arms
+        aServo_SetConfig(SERVO_CLAW_L, cfgL | (unsigned char)SRV_ENA);
+        aServo_SetConfig(SERVO_CLAW_R, cfgR | (unsigned char)SRV_ENA);
+    }
+    else
+    {
+        // disable arms
+        aServo_SetConfig(SERVO_CLAW_L, cfgL & (unsigned char)(~SRV_ENA));
+        aServo_SetConfig(SERVO_CLAW_R, cfgR & (unsigned char)(~SRV_ENA));
+    }
+}
+
+
+
+void go_servo(char id, int v)
+{
+    unsigned char cfg;
+    cfg = aServo_GetConfig(id);
+    if (v != 0)
+    {
+        // enable servo to go
+        aServo_SetConfig(id, cfg | (unsigned char)SRV_ENA);
+    }
+    else
+    {
+        // disable servo to be sure it stops
+        aServo_SetConfig(id, cfg & (unsigned char)(~SRV_ENA));
+    }
+
+    // input velocities must be -128 to 127
+    // convert velocities to 0 to 255 range
+    v = v + 128;
+    aServo_SetAbsolute(id, (unsigned char)v);
+}
+
+
+
+void go(int vL, int vR)
+{
+    go_servo(X_MOTOR_L, vL);
+    go_servo(X_MOTOR_R, vR);
+}
+
+
+
+void steer(int err, int maxv)
+{
+	int vr = maxv;
+	int vl = maxv;
+	int ferr = err;
+	
+	// take abs of err and limit it to maxv
+	if (err < 0) ferr = -err;
+	if (ferr > maxv) ferr = maxv;
+	
+	// robot is steered by slowing one wheel
+	// check sign of err to see which wheel gets slowed
+	if (err > 0)
+	{
+		vr = maxv - ferr;
+	}
+	else if (err < 0)
+	{
+		vl = maxv - ferr;
+	}
+	
+	// apply new speeds
+	go(vl, vr);
+}
+
+
+
+void moveClaw(int x)
+{
+    aServo_SetAbsolute(SERVO_CLAW_L, (unsigned char)x);
+    aServo_SetAbsolute(SERVO_CLAW_R, (unsigned char)x);
+}
+
+#endif // _MotorLib_T_

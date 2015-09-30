@@ -1,0 +1,44 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aDig.tea>
+#include <aA2D.tea>
+#include <aMulti.tea>
+#include <aMath.tea>
+#include <aSRF08.tea>
+
+#include "pmo.tea"
+#include "paux.tea"
+
+// file 0
+
+void main(char callingProcID)
+{
+    char x;
+    
+    // endless loop
+    while(1)
+    {
+        // wait for go signal with beacon index
+        x = (char)aMulti_Wait();
+                
+        // 24-sec inhibit before trying to detect beacon
+        aCore_Sleep(30000);
+        aCore_Sleep(30000);
+        aCore_Sleep(30000);
+        aCore_Sleep(30000);
+        aCore_Sleep(30000);
+        aCore_Sleep(30000);
+        aCore_Sleep(30000);
+        aCore_Sleep(30000);
+
+        while (1)
+        {
+            if (aDig_ReadInt(x) == 0)
+            {
+                // latch detection and wait for restart
+                aPad_WriteChar(PAD_FLAG, 1);
+                break;
+            }
+        }
+    }
+}

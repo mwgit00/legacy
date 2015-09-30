@@ -1,0 +1,15 @@
+#include <aCompass.tea>
+#include <aPrint.tea>
+#include <aCore.tea>
+
+void main()
+{
+    int cx;
+    while(1)
+    {
+        cx = aCompass_ReadInt();
+        aPrint_IntDec(cx);
+        aPrint_Char('\n');
+        aCore_Sleep(5000);
+    }
+}

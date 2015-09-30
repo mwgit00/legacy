@@ -1,0 +1,17 @@
+' FIRE-FIGHTER PROGRAM 7 -- ALL DONE
+
+beep	con	12
+beepgnd	con	13
+
+'-----------------------------------------
+
+done:
+	'
+	' beep to remind user to shut down robot
+	'
+	low beepgnd
+	freqout beep,200,500
+	pause 200
+	freqout beep,200,500
+	sleep 1
+	goto done

@@ -1,0 +1,107 @@
+#ifndef _PMO_T_
+#define _PMO_T_
+
+#include <aCore.tea>
+#include <aServo.tea>
+
+#include "pdefs.tea"
+
+
+
+void moSalute()
+{
+    aServo_SetConfig(X_CLAWS, (unsigned char)(0x80));
+    aServo_SetAbsolute(X_CLAWS, (unsigned char)CLAWS_WIDE);
+    aCore_Sleep(5000);
+    aServo_SetAbsolute(X_CLAWS, (unsigned char)CLAWS_GRIP);
+    aCore_Sleep(5000);
+}
+
+
+
+void moEnableClaws(unsigned char mask)
+{
+    // apply home position
+    aServo_SetAbsolute(X_CLAWS, (unsigned char)CLAWS_GRIP);
+    aServo_SetConfig(X_CLAWS, (unsigned char)(X_CFG_CLAWS & mask));
+}
+
+
+
+void moEnableElbow(unsigned char mask)
+{
+    // apply home position
+    aServo_SetAbsolute(X_ELBOW, (unsigned char)ELBOW_HOME);
+    aServo_SetConfig(X_ELBOW, (unsigned char)(X_CFG_ELBOW & mask));
+}
+
+
+
+void moEnableWheels(unsigned char mask)
+{
+    moGo(0, 0);
+    aServo_SetConfig(X_WHEEL_L, (unsigned char)(X_CFG_WHEEL_L & mask));
+    aServo_SetConfig(X_WHEEL_R, (unsigned char)(X_CFG_WHEEL_R & mask));
+}
+
+
+
+void moGo(int vL, int vR)
+{
+    aServo_SetAbsolute(X_WHEEL_L, (unsigned char)(vL + 128));
+    aServo_SetAbsolute(X_WHEEL_R, (unsigned char)(vR + 128));
+}
+
+
+
+void moGoSteer(int err, int maxv)
+{
+	int vr = maxv;
+	int vl = maxv;
+	int ferr = err;
+	
+	// take abs of err...
+	if (err & 0x8000) // sign bit?
+    {
+        ferr = -err;
+    }
+
+	// then limit it to maxv
+	if (ferr > maxv)
+    {
+        ferr = maxv;
+    }
+	
+	// robot is steered by slowing one wheel
+	// check sign of err to see which wheel gets slowed
+	if (err & 0x8000) // sign bit?
+	{
+		vl = maxv - ferr;
+	}
+	else
+	{
+		vr = maxv - ferr;
+	}
+	
+	// apply new speeds
+	moGo(vl, vr);
+}
+
+
+
+void moMoveClaws(int x)
+{
+    aServo_SetAbsolute(X_CLAWS, (unsigned char)x);
+}
+
+void moMoveElbow(int x)
+{
+    aServo_SetAbsolute(X_ELBOW, (unsigned char)x);
+}
+
+void moMoveElbowRel(char x)
+{
+    aServo_Relative(X_ELBOW, x);
+}
+
+#endif // _PMO_T_

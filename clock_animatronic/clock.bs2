@@ -1,0 +1,414 @@
+' {$STAMP BS2}
+' {$PORT COM1}
+
+' Main Program for Weird Clock Project
+' Mark R. Whitney
+' June 2006
+
+N2400           CON   16780      ' inverted, 2400 baud, 8-bit, no parity
+TRIGGER_T       CON   100        ' time (ms) to activate motor "relays"
+DUTY            CON   64         ' duty cycle (0-255) for activating motor "relays"
+SET_DELAY       CON   333        ' cycle rate when setting time
+SET_DELAY2      CON   667        ' cycle rate when advancing stepper
+MOUTH_DELAY     CON   20         ' time to pulse mouth motor
+BUTTON_SET_CT   CON   200        ' iterations button must be held down to enter set mode
+
+OUT_MIN_1       VAR   OUTA       ' ones digit of minutes display
+OUT_MIN_10      VAR   OUTB       ' tens digit of minutes display
+
+IO_AUX_CTRL     CON   8          ' serial control of stepper and aux outputs
+IN_MOUTH_OPEN   CON   9          ' mouth open sensor for mouth motor feedback
+IN_POT          CON   10         ' control knob
+OUT_PM          VAR   OUT11      ' PM light
+IN_MIN_CT       VAR   IN12       ' minute counter input
+IN_BTN          VAR   IN13       ' push button
+OUT_FIRE        CON   14         ' motor "relay" to say fire
+OUT_REV         CON   15         ' motor "relay" to make rev sound
+
+vb_t_minutes    VAR   Byte       ' current time
+vb_t_hours      VAR   Byte
+vb_a_minutes    VAR   Byte       ' alarm time
+vb_a_hours      VAR   Byte
+vb_temp         VAR   Byte
+vb_temp2        VAR   Byte
+vb_loop         VAR   Byte
+vb_btn_ct       VAR   Byte
+vb_tx2          VAR   Byte
+vb_tx3          VAR   Byte
+vw_pot          VAR   Word
+vf_alarm        VAR   Bit
+
+
+'----------------------------------------------------------
+main:
+
+  ' minute nibbles are all outputs (pins 7-0)
+  DIRL = %11111111
+
+  ' mix of I/O for high nibble (pins 15-8)
+  DIRH = %11001001
+
+  ' provide enough time for aux controller to init
+  PAUSE 100
+
+  ' turn on hour illuminator
+  vb_tx2 = 1
+  GOSUB sr_set_hours_LED
+
+  ' default setting of midnight for time and alarm
+  vb_t_minutes = 0
+  vb_t_hours = 0
+  vb_a_minutes = 0
+  vb_a_hours = 0
+
+  ' blink minutes after power interruption
+  ' and wait for a button press
+  GOSUB sr_had_reset
+
+main_set:
+
+  ' get control knob input
+  GOSUB sr_show_pot_value
+  IF IN_BTN = 0 THEN main_set_option
+  GOTO main_set
+
+main_set_option:
+
+  BRANCH vw_pot, [_opt0, _opt1, _opt2, _opt3, _opt4, _opt5, _opt6, _opt7]
+  GOTO _optX
+
+_opt0:
+  ' just display current settings
+  GOSUB sr_blank
+  GOSUB sr_write_t_hours
+  GOSUB sr_blank
+  GOSUB sr_write_t_minutes
+  GOSUB sr_blank
+  GOSUB sr_blank
+  GOSUB sr_write_a_hours
+  GOSUB sr_blank
+  GOSUB sr_write_a_minutes
+  GOSUB sr_blank
+  OUT_MIN_1 = 15                       ' blank ones-minutes
+  OUT_MIN_10 = vf_alarm                ' display alarm bit
+  GOSUB sr_blank
+  GOTO main_set
+_opt2:
+  ' set time minutes
+  vb_t_minutes = vb_t_minutes + 1
+  IF vb_t_minutes < 60 THEN _opt1x
+    vb_t_minutes = 0
+  _opt1x:
+  GOSUB sr_write_t_minutes
+  PAUSE SET_DELAY
+  GOTO main_set
+_opt1:
+  ' set time hours
+  GOSUB sr_advance_hours
+  vb_t_hours = vb_t_hours + 1
+  IF vb_t_hours < 24 THEN _opt2x
+    vb_t_hours = 0
+  _opt2x:
+  OUT_PM = vb_t_hours / 12
+  GOSUB sr_write_t_hours
+  PAUSE SET_DELAY2
+  GOTO main_set
+_opt4:
+  ' set alarm minutes
+  vb_a_minutes = vb_a_minutes + 1
+  IF vb_a_minutes < 60 THEN _opt3x
+    vb_a_minutes = 0
+  _opt3x:
+  GOSUB sr_write_a_minutes
+  PAUSE SET_DELAY
+  GOTO main_set
+_opt3:
+  ' set alarm hours
+  vb_a_hours = vb_a_hours + 1
+  IF vb_a_hours < 24 THEN _opt4x
+    vb_a_hours = 0
+  _opt4x:
+  GOSUB sr_write_a_hours
+  PAUSE SET_DELAY
+  GOTO main_set
+_opt5:
+  ' enable alarm
+  vf_alarm = 1
+  OUT_MIN_1 = 15          ' acknkowledge
+  OUT_MIN_10 = vf_alarm
+  PAUSE 100
+  GOTO main_set
+_opt6:
+  ' disable alarm
+  vf_alarm = 0
+  OUT_MIN_1 = 15          ' acknkowledge
+  OUT_MIN_10 = vf_alarm
+  PAUSE 100
+  GOTO main_set
+
+_opt7:
+_optX:
+  ' for any knob value >= 7
+  ' START MAIN TIME-KEEPING LOOP
+  ' must begin by writing minutes display
+  GOSUB sr_write_t_minutes
+
+main_chk_minutes:
+  ' start of tight loop to poll minute input...
+  PAUSE 1
+  ' see if button is being held down
+  IF IN_BTN = 0 THEN main_chk_minutes_0a
+  vb_btn_ct = 0
+  GOTO main_chk_minutes_1
+main_chk_minutes_0a:
+  vb_btn_ct = vb_btn_ct + 1
+  IF vb_btn_ct < BUTTON_SET_CT THEN main_chk_minutes_1
+  ' button has been held down so reset ct
+  vb_btn_ct = 0
+  OUT_MIN_1 = 15    ' blank display
+  OUT_MIN_10 = 15
+main_chk_minutes_0b:
+  ' loop to check for button release
+  PAUSE 1
+  IF IN_BTN = 0 THEN main_chk_minutes_0b
+  PAUSE 500
+  GOTO main_set
+main_chk_minutes_1:
+  ' a high means one minute has elapsed (second hand over opto-sensor)
+  IF IN_MIN_CT=0 THEN main_chk_minutes
+
+main_count_minutes:
+  ' handle minute count and roll-over
+  vb_t_minutes = vb_t_minutes + 1
+  IF vb_t_minutes < 60 THEN main_update_minutes_display
+  vb_t_minutes = 0
+  vb_t_hours = vb_t_hours + 1
+  GOSUB sr_advance_hours
+
+main_count_hours:
+  ' handle 24-hour count and roll-over
+  ' also update 12-hour PM light
+  IF vb_t_hours < 24 THEN main_update_minutes_display
+  vb_t_hours = 0
+  OUT_PM = vb_t_hours / 12
+
+main_update_minutes_display:
+  GOSUB sr_write_t_minutes
+
+main_check_alarm:
+  ' check to see if alarm is enabled
+  IF vf_alarm = 0 THEN main_special
+  ' when minutes and hours match alarm time then sound alarm
+  ' only sound alarm for less than a minute else a minute input may be missed
+  IF vb_t_minutes <> vb_a_minutes THEN main_special
+  IF vb_t_hours <> vb_a_hours THEN main_special
+  PAUSE 500
+  GOSUB sr_alarm
+  GOSUB sr_alarm
+  GOSUB sr_alarm
+  GOTO main_chk_minutes
+
+main_special:
+  ' chime on the hour (buzz the nose, toggle hour illuminator LED)
+  IF vb_t_minutes <> 0 THEN main_special_2:
+    vb_temp2 = vb_t_hours // 12
+  IF vb_temp2 <> 0 THEN main_special_1
+    vb_temp2 = 12 ' modulo 12 is 0 at noon and midnight, but we want 12 chimes
+main_special_1:
+  FOR vb_loop = 1 TO vb_temp2
+    vb_tx2 = 0
+    GOSUB sr_set_hours_LED
+    GOSUB sr_ctrl_nose
+    vb_tx2 = 1
+    GOSUB sr_set_hours_LED
+    PAUSE 1000
+  NEXT
+  GOTO main_done
+main_special_2:
+  ' open and close mouth on the quarter hour
+  IF vb_t_minutes = 15 THEN main_special_3:
+  IF vb_t_minutes = 30 THEN main_special_3:
+  IF vb_t_minutes = 45 THEN main_special_3:
+  GOTO main_done
+main_special_3:
+  vb_temp2 = vb_t_minutes / 15
+  FOR vb_loop = 1 TO vb_temp2
+    GOSUB sr_open_close_mouth
+    PAUSE 1000
+  NEXT
+
+main_done:
+  ' always leave enough time for second hand to leave opto-sensor
+  ' and also take a nap to reduce power/heat
+  SLEEP 45
+  GOTO main_chk_minutes
+
+
+'----------------------------------------------------------
+
+' write time minutes to 7-segment LED control outputs
+sr_write_t_minutes:
+  vb_temp = vb_t_minutes // 10
+  OUT_MIN_1 = vb_temp
+  vb_temp = vb_t_minutes / 10
+  OUT_MIN_10 = vb_temp
+  RETURN
+
+' write time hours to 7-segment LED control outputs
+sr_write_t_hours:
+  vb_temp = vb_t_hours // 10
+  OUT_MIN_1 = vb_temp
+  vb_temp = vb_t_hours / 10
+  OUT_MIN_10 = vb_temp
+  RETURN
+
+' write alarm minutes to 7-segment LED control outputs
+sr_write_a_minutes:
+  vb_temp = vb_a_minutes // 10
+  OUT_MIN_1 = vb_temp
+  vb_temp = vb_a_minutes / 10
+  OUT_MIN_10 = vb_temp
+  RETURN
+
+' write alarm hours to 7-segment LED control outputs
+sr_write_a_hours:
+  vb_temp = vb_a_hours // 10
+  OUT_MIN_1 = vb_temp
+  vb_temp = vb_a_hours / 10
+  OUT_MIN_10 = vb_temp
+  RETURN
+
+' blank minutes display briefly after a slight delay
+sr_blank:
+  PAUSE SET_DELAY
+  OUT_MIN_1 = 15
+  OUT_MIN_10 = 15
+  PAUSE SET_DELAY
+  RETURN
+
+' activate both sound events
+sr_alarm:
+  GOSUB sr_say_fire_lets_go
+  GOSUB sr_make_motor_rev_sound
+  RETURN
+
+' sound event - takes about 8 seconds to finish
+sr_say_fire_lets_go:
+  PWM OUT_FIRE, DUTY, TRIGGER_T
+  GOSUB sr_open_close_mouth
+  PAUSE 1000
+  GOSUB sr_open_close_mouth
+  PAUSE 5000
+  RETURN
+
+' sound event - takes about 8 seconds to finish
+sr_make_motor_rev_sound:
+  PWM OUT_REV, DUTY, TRIGGER_T
+  GOSUB sr_ctrl_nose
+  PAUSE 500
+  GOSUB sr_ctrl_nose
+  PAUSE 500
+  GOSUB sr_ctrl_nose
+  PAUSE 500
+  PAUSE 5000
+  RETURN
+
+' send signal to advance stepper motor
+sr_advance_hours:
+  vb_tx2 = 0         ' does nothing
+  vb_tx3 = 0         ' does nothing
+  SEROUT IO_AUX_CTRL, N2400, ["A", vb_tx2, vb_tx3]
+  SERIN IO_AUX_CTRL, N2400, [vb_temp]
+  RETURN
+
+' apply 40% power to mouth motor for user-specified amount of time
+sr_ctrl_mouth:
+  vb_tx2 = 96           ' apply 40% power
+  SEROUT IO_AUX_CTRL, N2400, ["X", vb_tx2, vb_tx3]
+  SERIN IO_AUX_CTRL, N2400, [vb_temp]
+  RETURN
+
+' apply 25% power to nose motor for roughly half a second
+sr_ctrl_nose:
+  vb_tx2 = 64     ' 25% power
+  vb_tx3 = 200    ' for roughly half a second
+  SEROUT IO_AUX_CTRL, N2400, ["Y", vb_tx2, vb_tx3]
+  SERIN IO_AUX_CTRL, N2400, [vb_temp]
+  RETURN
+
+' change state of hours LED
+sr_set_hours_LED:
+  vb_tx3 = 0
+  SEROUT IO_AUX_CTRL, N2400, ["Z", vb_tx2, vb_tx3]
+  SERIN IO_AUX_CTRL, N2400, [vb_temp]
+  RETURN
+
+' use feedback to cycle mouth through opened and closed states
+' takes about 5 seconds to cycle
+sr_open_close_mouth:
+  vb_tx3 = MOUTH_DELAY
+  GOSUB sr_ctrl_mouth
+  IF IN9 = 1 THEN sr_open_close_mouth_1
+  GOTO sr_open_close_mouth
+sr_open_close_mouth_1:
+  vb_tx3 = MOUTH_DELAY
+  GOSUB sr_ctrl_mouth
+  IF IN9 = 0 THEN sr_open_close_mouth_2
+  GOTO sr_open_close_mouth_1
+sr_open_close_mouth_2:
+  vb_tx3 = MOUTH_DELAY
+  GOSUB sr_ctrl_mouth
+  RETURN
+
+' blinking display at power-up reset
+' poll for button press to exit routine
+sr_had_reset:
+  OUT_MIN_1 = 0                              ' zero display
+  OUT_MIN_10 = 0
+  vb_temp = 50
+sr_had_reset_0:
+  IF IN_BTN = 0 THEN sr_had_reset_done
+  PAUSE 10
+  vb_temp = vb_temp - 1
+  IF vb_temp <> 0 THEN sr_had_reset_0
+  OUT_MIN_1 = 15                             ' blank display
+  OUT_MIN_10 = 15
+  vb_temp = 50
+sr_had_reset_1:
+  IF IN_BTN = 0 THEN sr_had_reset_done
+  PAUSE 10
+  vb_temp = vb_temp - 1
+  IF vb_temp <> 0 THEN sr_had_reset_1
+  GOTO sr_had_reset
+sr_had_reset_done:
+  OUT_MIN_1 = 0                              ' zero display when button hit
+  OUT_MIN_10 = 0
+  RETURN
+
+' reads the mode knob and displays mode in minutes display
+sr_show_pot_value:
+  HIGH IN_POT                                ' discharge cap
+  PAUSE 1
+  RCTIME IN_POT, 1, vw_pot
+  vw_pot = vw_pot / 100                      ' scale output to be at least 0-7
+  OUT_MIN_1 = vw_pot                         ' (this depends on RC circuit)
+  OUT_MIN_10 = 15
+  RETURN
+
+
+'----------------------------------------------------------
+
+sr_test_aux:
+'  vb_tx3 = 200
+'  GOSUB sr_ctrl_mouth
+'  PAUSE 2500
+'  GOSUB sr_ctrl_nose
+'  PAUSE 1000
+  vb_tx2 = 1
+  GOSUB sr_set_hours_LED
+  PAUSE 500
+  vb_tx2 = 0
+  GOSUB sr_set_hours_LED
+  PAUSE 500
+  GOTO sr_test_aux
+  RETURN

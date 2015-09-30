@@ -1,0 +1,57 @@
+#ifndef _PDEFS_T_
+#define _PDEFS_T_
+
+
+// MOTORS
+#define X_WHEEL_L           0
+#define X_WHEEL_R   	    1
+#define X_ELBOW             2
+#define X_CLAWS             3
+
+#define X_CFG_WHEEL_L       0x80 // normal
+#define X_CFG_WHEEL_R       0xC0 // invert
+#define X_CFG_ELBOW         0x81 // slow speed
+#define X_CFG_CLAWS         0x85 // slow speed (but slightly faster than elbow)
+
+#define ELBOW_UP            10
+#define ELBOW_TABLE         45
+#define ELBOW_HOME          142
+#define CLAWS_WIDE          250
+#define CLAWS_NUDGE         225
+#define CLAWS_OPEN          200
+#define CLAWS_GRIP          78
+
+#define X_ENA               ((unsigned char)0xFF)
+#define X_OFF               0x00
+
+
+// SONAR
+#define SX                  0xE6
+
+
+// CLAWS
+#define THR_TABLE           290
+
+
+// A2D
+#define A2D_HOME            0
+#define A2D_STALL           1
+#define A2D_EDGE            2
+#define A2D_RNG_R           3
+#define A2D_RNG_L           4
+
+
+// DIGITAL I/O
+#define DIG_BUTTON          0
+#define DIG_BUZZER          1
+#define DIG_BUZZER_IOPORT   0x0505
+#define DIG_L_BEACON        3
+#define DIG_R_BEACON        6
+
+
+// PAD I/O
+#define PAD_GO              0
+#define PAD_BEACON          2
+#define PAD_FLAG            4
+
+#endif // _PDEFS_T_

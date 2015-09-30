@@ -1,0 +1,176 @@
+#ifndef _CamLib_T_
+#define _CamLib_T_
+
+#include <aCore.tea>
+#include <aDump.tea>
+
+
+
+// MUST HAVE global absolute addressable buffer
+// for holding serial data from CMUcam
+// the buffer starts at absolute stack address 0
+// has 12 bytes followed by three words
+
+
+
+// blinks the CMUcam2 red light
+// on-time is variable
+void camBlink(int t)
+{
+    aCore_Sleep(500);
+    aDump_String("L0 1");
+    aDump_Char(13);
+    aCore_Sleep(t);
+    aDump_String("L0 0");
+    aDump_Char(13);
+    aCore_Sleep(500);
+}
+
+
+
+// custom initialization routine
+void camInit()
+{
+    int i;
+
+    // give some time for CMUcam2 reset
+    aCore_Sleep(20000);
+    aDump_Char(13);
+    camBlink(1000);
+    
+    // home the head
+    aDump_String("SV 0 55");
+    aDump_Char(13);
+    camBlink(1000);
+
+    // auto white-balance on, auto-gain on
+    aDump_String("CR 18 44 19 33");
+    aDump_Char(13);
+    camBlink(1000);
+
+    // run in these auto modes for for a while...
+    for (i = 0; i < 6; i++)
+    {
+        camBlink(500);
+        aCore_Sleep(10000);
+    }
+    
+    // then fix the gain and balance
+    aDump_String("CR 18 40 19 32");
+    aDump_Char(13);
+    camBlink(1000);
+    
+    // enable poll mode
+    aDump_String("PM 1");
+    aDump_Char(13);
+    camBlink(1000);
+
+    // set auto mode for tracking light
+    aDump_String("L1 2");
+    aDump_Char(13);
+    camBlink(1000);
+
+    // set raw IO mode and ACK/NCK suppression
+    aDump_String("RM 7");
+    aDump_Char(13);
+
+    // courtesy delay
+    aCore_Sleep(5000);
+}
+
+
+
+// set position of specified servo
+void camRawMoveServo(unsigned char i, unsigned char p)
+{
+    asm
+    {
+        pushls 0x5356           // "SV"
+        pushlb 0x02             // 2 bytes to follow
+        pushss 7                // index and position bytes
+        pushlb 0x05             // 5 bytes total
+        popbm aPortSerialNTX    // ship 'em
+    }
+}
+
+
+
+// set tracking params
+// min-max packed into each RGB component
+// min in high byte, max in low byte
+void camRawSetTrack(unsigned int r, unsigned int g, unsigned int b)
+{
+    asm
+    {
+        pushls 0x5354           // "ST"
+        pushlb 0x06             // 6 bytes to follow
+        pushss 11               // rmin rmax
+        pushss 11               // gmin gmax
+        pushss 11               // bmin bmax
+        pushlb 0x09             // 9 bytes total
+        popbm aPortSerialNTX    // ship 'em
+    }
+}
+
+
+
+// get tracking params
+// RGB components will be placed in last 3 words of global buffer
+void camRawGetTrack()
+{
+    asm
+    {
+        // send raw output TC command
+        pushls 0x4754 // push bytes "GT" 0 3
+        pushls 0x0003
+        popbm aPortSerialNTX
+
+        // wait for 8-byte raw input reply
+        // 255 RMIN RMAX GMIN GMAX BMIN BMAX :
+        pushlb 8
+        popbm aPortSerialNRX
+
+        // discard size of read and :
+        popb
+        popb
+
+        // save bytes into global buffer
+        popssa 16
+        popssa 14
+        popssa 12
+        // discard leading 255
+        popb
+    }
+}
+
+
+
+// perform one tracking update
+void camRawTrack()
+{
+    asm
+    {
+        // send raw output TC command
+        pushls 0x5443 // push bytes "TC" 0 3
+        pushls 0x0003
+        popbm aPortSerialNTX
+
+        // wait for 11-byte raw input reply
+        // 255,M,mx,my,x1,y1,x2,y2,pix,conf,:
+        pushlb 11
+        popbm aPortSerialNRX
+
+        // discard size of read
+        popb
+
+        // save bytes into global buffer
+        popssa 9
+        popssa 7
+        popssa 5
+        popssa 3
+        popssa 1
+        popbsa 0
+    }
+}
+
+#endif // _CamLib_T_

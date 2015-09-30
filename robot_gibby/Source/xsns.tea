@@ -1,0 +1,49 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+
+#include "paux.tea"
+
+void main ()
+{
+    int iSonar = 0;
+    int iRngL = 0;
+    int iRngR = 0;
+    int iButton = 0;
+
+    // buzzer is an output
+    aCore_Outportc (DIG_BUZZER_CFG, DIG_CODE_OUTPUT);
+    
+    // set up sonar nose
+    // configure EZ1 as high pulse width timer
+    // EZ1 RX line is brought high at start to enable continuous ranging
+    aCore_Outportc (DIG_EZ1_PW_CFG, DIG_CODE_HIGH_TMR);
+    aCore_Outportc (DIG_EZ1_RX_CFG, DIG_CODE_OUTPUT);
+    aCore_Outportc (DIG_EZ1_RX_IO, 1);
+    
+    beep (2);
+    
+    while (1)
+    {
+        // always reconfigure pin before taking sonar reading
+        // (workaround for old Build 3)
+        aCore_Outportc (DIG_EZ1_PW_CFG, DIG_CODE_HIGH_TMR);
+        iSonar = aCore_Inporti (DIG_EZ1_PW_PTIME);
+        
+        iRngL = aCore_Inporti (A2D_RNG_L_RD);
+        iRngR = aCore_Inporti (A2D_RNG_R_RD);
+        iButton = aCore_Inporti (DIG_BUTTON_IO);
+        
+        aPrint_String ("S=");
+        aPrint_IntDec (iSonar);
+        aPrint_String (", L=");
+        aPrint_IntDec (iRngL);
+        aPrint_String (", R=");
+        aPrint_IntDec (iRngR);
+        aPrint_String (", B=");
+        aPrint_IntDec (iButton);
+        aPrint_String ("\n");
+        
+        buzz (20, iSonar / 100);
+        aCore_Sleep (1000);
+    }
+}

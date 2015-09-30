@@ -1,0 +1,502 @@
+' Stampy BS2 Brain software
+' January 10, 1999
+'
+' 2-15-99 figured out how to do turning while walking
+'         achieved first successfull wall-hug!!!
+' 2-20-99 more walking tests -- did a rotation
+' 2-21-99 version B
+' 2-27-99 version C -- switching subroutines for walking
+' 3-07-99 visor control (bogus)
+' 3-20-99 version E -- candle tests with new sensor!!!
+' 4-02-99 version F -- first navigation tests!!!
+' 4-03-99 version X -- major re-write
+
+true	con	1
+false	con	0
+
+
+
+' stamp comm stuff
+
+ACK	con	65	' received when BS1 finishes a command
+N2400	con	16780	' BS2 equivalent of BS1 comm mode
+LINK	con	15	' serial communication pin 
+
+STEPL	con	0	' step and balance on left foot
+STEPR	con	1	' step and balance on right foot
+TORSO	con	2	' move torso to absolute position
+FANON	con	3	' turn fan on for a while
+RSTRT	con	4	' tell BS1 to enter beep-input state
+JOINT	con	5	' move joint N to position M
+XSIGN	con	6	' toggle green light
+
+
+' GP2D02 IR proximity detector stuff
+
+IRVIN	con	10	' control line
+IRVOUTR	con	11	' right sensor output pin
+IRVOUTL	con	12	' left sensor output pin
+irdistl	var	byte	' left sensor value
+irdistr	var	byte	' right sensor value
+
+irrpre0	var	byte	' previous sensor values
+irlpre0	var	byte
+wallval	var	byte	' value when wall ahead detected
+
+
+' general purpose counting variables
+
+ii	var	word
+i	var	byte
+k	var	byte		' body
+n	var	byte		' extinguish
+j	var	nib		' rotate
+x	var	nib		' look-up routines
+
+
+' navigation stuff
+
+waypoint	var	byte
+steplimit	var	byte
+
+
+' walking stuff
+
+rankpos		var	byte	' ankle positions
+lankpos		var	byte
+stepdr		var	byte	' turning variables
+stepdl		var	byte
+
+hugside		var	bit	' indicates left or right wall hug 
+laststep	var	bit	' indicates which foot balanced last
+rotdir		var	bit	' indicates left or right rotate
+doseek		var	bit	' true if candle should be sought
+wallahead	var	bit	' true if wall ahead
+walkmode	var	bit	' true if continuous else one step
+dorotate	var	bit	' true if rotation needed
+
+right		con	0	' (hug, last balance foot, etc.)
+left		con	1
+walk_step	con	0	' take one step at a time
+walk_auto	con	1	' continous walk
+
+body_cr	con	150		' near center right
+body_cl	con	90		' near center left
+body_c	con	120		' body center and extremes
+body_r	con	240	
+body_l	con	0
+
+aheadr	con	82	' normal walking constants
+aheadl	con	82
+ankhug	con	10	' hug tweak parameter
+
+' trial and error step timing constants
+
+bodytm0	con	350		' rotation delay
+bodytm4	con	450	'380		' walking body swing delay
+bodytm5	con	20		' walking ankle delay
+
+rocon	con	22		' rotation ankle param
+
+' CANDLE inputs
+
+FLAME	var	ins.bit13	' UV flame detector
+CANDLE	var	ins.bit2	' candle spotter
+FUZE	var	ins.bit14	' candle fuze
+
+
+
+'----------------------------------------------------------------
+
+READY:
+goto COMMENCE
+FOOBAR:
+	serin LINK,N2400,[WAIT(ACK)]
+	for i=1 to 8
+		gosub sr_walk_hall
+	next
+	serout LINK,N2400,[RSTRT,0,0]
+	goto FOOBAR
+end
+
+COMMENCE:
+
+	stepdr=0
+	stepdl=0
+	waypoint=0
+
+	irdistr=255
+	irdistl=255
+
+	foo:
+		serin LINK,N2400,[WAIT(ACK)]
+
+		gosub sr_navigate
+		gosub sr_pre_walk
+		gosub sr_walk_hall
+		gosub sr_switch_attention
+
+		serout LINK,N2400,[RSTRT,0,0]
+		goto foo
+	end
+
+
+
+
+
+'---------------------------------------- DIAGNOSTIC SUBROUTINES
+
+sr_green_tog:
+	serout LINK,N2400,[XSIGN,0,0]
+	serin LINK,N2400,[WAIT(ACK)]
+	return	
+
+sr_irtest:
+	gosub sr_ir_lprox
+	gosub sr_ir_rprox
+'	debug dec stepdr," ", dec stepdl, " ", dec irdistr," ", dec irdistl, cr
+'	debug dec irdistl, " ", dec irlpre0, cr
+'	debug "L=", dec irdistl, " R=", dec irdistr, cr
+	return
+
+'---------------------------------------- IR PROX SUBROUTINES
+
+sr_ir_lprox:
+	serout LINK,N2400,[XSIGN,0,0]	' too deep for gosub
+	serin LINK,N2400,[WAIT(ACK)]
+	irlpre0=irdistl
+	low IRVIN
+	pause 70
+	shiftin IRVOUTL,IRVIN,MSBPOST,[irdistl\8]
+	high IRVIN
+	pause 2
+	serout LINK,N2400,[XSIGN,0,0]	' too deep for gosub
+	serin LINK,N2400,[WAIT(ACK)]
+	return
+
+sr_ir_rprox:
+	serout LINK,N2400,[XSIGN,0,0]	' too deep for gosub
+	serin LINK,N2400,[WAIT(ACK)]
+	irrpre0=irdistr
+	low IRVIN
+	pause 70
+	shiftin IRVOUTR,IRVIN,MSBPOST,[irdistr\8]
+	high IRVIN
+	pause 2
+	serout LINK,N2400,[XSIGN,0,0]	' too deep for gosub
+	serin LINK,N2400,[WAIT(ACK)]
+	return
+
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' SWITCHING SUBROUTINES
+' (switch subroutines redirect flow to appropriate side primitive)
+
+sr_switch_rotate:
+	branch rotdir,[sr_rotate_r,sr_rotate_l]
+
+sr_switch_attention:
+	branch laststep,[sr_attention_l,sr_attention_r]
+
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' SIDE-SPECIFIC SUBROUTINES FOR STEP PRIMITIVES
+
+sr_step_lbal_anks:
+	lankpos=  (aheadl+stepdl)
+	rankpos=  (aheadr+stepdr)
+sr_step_lbal:
+	serout LINK,N2400,[STEPL,rankpos,lankpos]
+	serin LINK,N2400,[WAIT(ACK)]
+	laststep=left
+	return
+
+sr_step_rbal_anks:
+	lankpos= -(aheadl+stepdl)
+	rankpos= -(aheadr+stepdr)
+sr_step_rbal:
+	serout LINK,N2400,[STEPR,rankpos,lankpos]
+	serin LINK,N2400,[WAIT(ACK)]
+	laststep=right
+	return
+
+sr_body_l:
+	serout LINK,N2400,[TORSO,body_l,0]
+	serin LINK,N2400,[WAIT(ACK)]
+	return
+
+sr_body_r:
+	serout LINK,N2400,[TORSO,body_r,0]
+	serin LINK,N2400,[WAIT(ACK)]
+	return
+
+sr_body_c:
+	serout LINK,N2400,[TORSO,body_c,0]
+	serin LINK,N2400,[WAIT(ACK)]
+	return
+
+sr_body_k:
+	serout LINK,N2400,[TORSO,k,0]
+	serin LINK,N2400,[WAIT(ACK)]
+	return
+
+sr_attention_r:
+	gosub sr_body_r
+	pause bodytm0
+	lankpos=  0
+	rankpos=  0
+	gosub sr_step_rbal
+	gosub sr_body_c
+	pause bodytm0
+	return
+
+sr_attention_l:
+	gosub sr_body_l
+	pause bodytm0
+	lankpos=  0
+	rankpos=  0
+	gosub sr_step_lbal
+	gosub sr_body_c
+	pause bodytm0
+	return
+
+sr_rotate_l:
+	for j=0 to 2
+		gosub sr_body_r
+		pause bodytm0
+		lankpos= -rocon
+		rankpos=  rocon
+		gosub sr_step_rbal
+		pause bodytm0
+
+		gosub sr_body_l
+		pause bodytm0
+		lankpos=  rocon
+		rankpos= -rocon
+		gosub sr_step_lbal
+		pause bodytm0
+	next
+	return
+
+sr_rotate_r:
+	for j=0 to 2
+		gosub sr_body_l
+		pause bodytm0
+		lankpos= -rocon
+		rankpos=  rocon
+		gosub sr_step_lbal
+		pause bodytm0
+
+		gosub sr_body_r
+		pause bodytm0
+		lankpos=  rocon
+		rankpos= -rocon
+		gosub sr_step_rbal
+		pause bodytm0
+	next
+	return
+
+
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''
+' WALL-HUGGING and COLLISION DETECTION
+' (distance values from 4-3-99 calibration)
+
+sr_avoid_crash_r:
+	wallahead=false
+	gosub sr_ir_rprox
+	if irdistr>133 then sr_avoid_crash_r_now
+	return
+	sr_avoid_crash_r_now:
+		wallval=irdistr
+		wallahead=true
+	return
+
+sr_avoid_crash_l:
+	wallahead=false
+	gosub sr_ir_lprox
+	if irdistl>147 then sr_avoid_crash_l_now
+	return
+	sr_avoid_crash_l_now:
+		wallval=irdistl
+		wallahead=true
+	return
+
+
+
+
+sr_navigate:
+	branch waypoint,[sr_nav_0,sr_nav_1,sr_nav_2,sr_nav_3]
+	sr_nav_0:
+		dorotate=false
+		doseek=false
+		hugside=left
+		walkmode=walk_auto
+		return
+	sr_nav_1:
+		dorotate=true
+		doseek=false
+		rotdir=left
+		hugside=right
+		walkmode=walk_auto
+		return
+	sr_nav_2:
+		dorotate=true
+		doseek=false
+		rotdir=right
+		hugside=left
+		walkmode=walk_step
+		steplimit=4
+		return
+	sr_nav_3:
+		dorotate=false
+		doseek=true
+		return
+
+sr_pre_walk:
+	waypoint=waypoint+1
+	if dorotate=false then sr_pre_walk_a
+		gosub sr_switch_rotate
+	sr_pre_walk_a:
+	if doseek=false then sr_pre_walk_b
+		goto blink_done
+	sr_pre_walk_b:
+		return
+
+
+'''''''''''''''''''''''''''''''''''''''''''''''''
+' COMPLICATED STUFF
+
+sr_walk_hall:
+
+	gosub sr_body_l
+	pause bodytm4
+	gosub sr_avoid_crash_r
+	if wallahead=false then sr_walk_hall_a
+		return
+	sr_walk_hall_a:
+
+	gosub sr_ir_lprox
+	stepdr=0
+	stepdl=0
+	if irdistl < 112 then sr_walk_hall_skipl
+		lookdown irdistl, <= [147,255] ,x
+		lookup x,[0,ankhug],stepdr
+		lookup x,[ankhug,0],stepdl
+	sr_walk_hall_skipl:
+	gosub sr_step_lbal_anks
+	pause bodytm5
+
+	gosub sr_body_r
+	pause bodytm4
+	gosub sr_avoid_crash_l
+	if wallahead=false then sr_walk_hall_b
+		return
+	sr_walk_hall_b:
+
+	gosub sr_ir_rprox
+	stepdr=0
+	stepdl=0
+	if irdistr < 97 then sr_walk_hall_skipr
+		lookdown irdistr, <= [133,255] ,x
+		lookup x,[ankhug,0],stepdr
+		lookup x,[0,ankhug],stepdl
+	sr_walk_hall_skipr:
+	gosub sr_step_rbal_anks
+	pause bodytm5
+
+	if walkmode=walk_auto then sr_walk_hall
+
+		' dead-reckoning by number of steps
+
+	steplimit=steplimit-1
+	if steplimit>0 then sr_walk_hall
+
+	return
+
+
+
+sr_extinguish:
+
+	' do an lbal step so scanner is on left side
+
+	sr_extinguish_again:
+
+		gosub sr_body_l
+		pause 700
+		gosub sr_step_lbal_anks
+		pause 500
+
+	' snap back to near center then
+	' do slow scan till candle found
+
+	k=body_cl
+	gosub sr_body_k
+	pause 500
+
+	for k=body_cl to body_r step 2
+		if FUZE=1 then sr_extinguish_blow
+		if CANDLE=1 then sr_extinguish_found
+		gosub sr_body_k
+	next
+
+	' default is go straight (x==2) if candle not found
+	' a failed scan occurs when k>=body_r
+
+	x=2
+	if k>=body_r then sr_extinguish_steer
+
+	sr_extinguish_found:
+		gosub sr_body_r
+		ii=body_r-(k max body_r)
+		ii=ii*5			' pause depends when candle found
+		pause ii
+'		lookdown k, <= [160,167,173,180,255] ,x
+		lookdown k, <= [170,177,183,190,255] ,x
+	sr_extinguish_steer:
+		lookup x,[-10, -5, 0,  5, 10],stepdr
+		lookup x,[ 10,  5, 0, -5,-10],stepdl
+		gosub sr_step_rbal_anks
+		pause 500
+
+	goto sr_extinguish_again
+
+sr_extinguish_blow:
+
+	i=25
+
+	sr_extinguish_keep_blowing:
+
+		i=i+5
+
+		' fan on (3 sec, 3.5 sec, 4 sec etc.)
+
+		gosub sr_green_tog
+		serout LINK,N2400,[FANON,i,0]
+		serin LINK,N2400,[WAIT(ACK)]
+		gosub sr_green_tog
+
+		' pause 1 sec to be sure UV has settled
+		' take 200 samples in 2 sec
+		' to verify that candle is extinguished!!!
+
+		pause 1000
+		for n=1 to 200
+			if FLAME=0 then sr_extinguish_keep_blowing
+			pause 10
+			gosub sr_green_tog
+		next
+
+	' if here then flame is extinguished -- hooray!!!
+
+
+blink_done:
+
+	serout LINK,N2400,[XSIGN,0,0]	' too deep for gosub
+	serin LINK,N2400,[WAIT(ACK)]
+	pause 250
+	goto blink_done
+
+ABORT:
+	end

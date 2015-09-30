@@ -1,0 +1,203 @@
+' SSC2 test
+' 1-17-2000
+' 1-30-2000 turning tests
+' 2-07-2000 switched from 90 deg to 180 deg range
+' 2-10-2000 wallhug experiments
+' 2-13-2000 new ankles and tweaked walk
+' 2-15-2000 tried head head-start for walk
+
+
+
+' general purpose variables
+
+i	var	byte
+ii	var	byte
+n1	var	byte
+n2	var	byte
+x	var	nib
+j	var	nib
+
+
+' prox variables
+
+irw	var	byte	' wall checker
+irf	var	byte	' forward checker
+
+
+' servo control parameters
+
+sync	con	255
+ssc2	con	7	' pin 7 (use another pin to disable servos)
+svo	con	0
+n96n	con	$4054
+
+
+' body servo IDs
+
+svhead	con	3
+svlank	con	0
+svrank	con	7
+svlhip	con	1
+svrhip	con	6
+
+
+' body home positions
+
+hmhead	con	132	'
+hmlank	con	121'123	'
+hmrank	con	139'137	'
+hmlhip	con	127	'
+hmrhip	con	122	'
+hmhipd	con	5	' left home is 5 more than right home
+
+
+' walking parameters
+
+taux00	con	50	' spare
+tshift	con	50'100	' delay for weight to shift to balance foot
+thipup	con	50	' delay for hips to raise opposite foot
+tankmv	con	100'150	' delay for anks to take step
+thipdn	con	50'000	' delay for hips to drop opposite foot
+tfinal	con	250'250	' delay for weight to shift back to center
+
+jwhead	con	75	' balancing offset for head
+jwhips	con	15'35	' offset for raising hips
+jwanks	con	30	' offset for normal step
+
+brankd	var	byte	' right ankle turning offset
+blankd	var	byte	' left ankle turning offset
+brankx	var	byte	' right ankle step offset
+blankx	var	byte	' left ankle step offset
+brankp	var	byte	' persisting right ankle position
+blankp	var	byte	' persisting left ankle position
+bheadp	var	byte	' persisting head position
+pos1	var	byte	' temporary position calculation variable
+
+'-----------------------------------------------
+
+more:
+
+	' initialize
+	brankp=hmrank
+	blankp=hmlank
+	brankd=0
+	blankd=0
+	gosub sr_home
+'goto more
+
+goto foo
+prox:
+	gosub sr_prox_w
+	gosub sr_hugcalc
+	debug dec irw,",",dec brankd,",", dec blankd,cr
+	goto prox
+
+pause 2000
+
+foo:
+pause 6000
+
+for i=1 to 8
+
+	blankx=jwanks
+	brankx=jwanks
+	gosub sr_lbstep
+
+	gosub sr_prox_w
+	gosub sr_hugcalc
+
+
+	blankx=jwanks
+	brankx=jwanks
+	gosub sr_rbstep
+
+	gosub sr_prox_w
+	gosub sr_hugcalc
+
+next
+
+goto foo
+
+
+
+'-----------------------------------------------------------------
+
+
+sr_home:
+	debug "home",cr
+	for i=1 to 10
+		serout ssc2,n96n,[sync,svhead,hmhead]
+		serout ssc2,n96n,[sync,svlhip,hmlhip,sync,svrhip,hmrhip]
+		serout ssc2,n96n,[sync,svlank,hmlank,sync,svrank,hmrank]
+	next
+	pause 100
+return
+
+sr_lbstep:
+	'
+	' LEFT-FOOT BALANCE STEP (RIGHT TURN)
+	'
+	serout ssc2,n96n,[sync,svhead,hmhead+jwhead]
+	pause tshift
+	pos1=hmlhip-jwhips
+	serout ssc2,n96n,[sync,svlhip,pos1,sync,svrhip,pos1-hmhipd]
+	pause thipup
+	blankp=hmlank+blankx'+blankd '???
+	brankp=hmrank+brankx+brankd
+	serout ssc2,n96n,[sync,svlank,blankp,sync,svrank,brankp]
+	pause tankmv
+	serout ssc2,n96n,[sync,svhead,hmhead-jwanks]
+	pause thipdn
+	pos1=hmlhip
+	serout ssc2,n96n,[sync,svlhip,pos1]
+	serout ssc2,n96n,[sync,svrhip,pos1-hmhipd]
+'	pause thipdn
+'	serout ssc2,n96n,[sync,svhead,hmhead-jwanks]
+	pause tfinal
+return
+
+sr_rbstep:
+	'
+	' RIGHT-FOOT BALANCE STEP (LEFT TURN)
+	'
+	serout ssc2,n96n,[sync,svhead,hmhead-jwhead]
+	pause tshift
+	pos1=hmlhip+jwhips
+	serout ssc2,n96n,[sync,svlhip,pos1,sync,svrhip,pos1-hmhipd]
+	pause thipup
+	blankp=hmlank-blankx-blankd
+	brankp=hmrank-brankx'-brankd'???
+	serout ssc2,n96n,[sync,svlank,blankp,sync,svrank,brankp]
+	pause tankmv
+	serout ssc2,n96n,[sync,svhead,hmhead+jwanks]
+	pause thipdn
+	pos1=hmlhip
+	serout ssc2,n96n,[sync,svrhip,pos1-hmhipd]
+	serout ssc2,n96n,[sync,svlhip,pos1]
+'	pause thipdn
+'	serout ssc2,n96n,[sync,svhead,hmhead+jwanks]
+	pause tfinal
+return
+
+sr_prox_w:
+	low 6
+	sr_prox_w_wait:
+		if in8=0 then sr_prox_w_wait
+	shiftin 8,6,MSBPOST,[irw\8]
+	high 6
+return
+
+sr_prox_f:
+	low 10
+	sr_prox_f_wait:
+		if in9=0 then sr_prox_f_wait
+	shiftin 9,10,MSBPOST,[irf\8]
+	high 10
+return
+
+sr_hugcalc:
+'	lookdown irw,<=[102,106,110,116,121,129,255],x
+	lookdown irw,<=[86,90,93,96,99,102,104,110,255],x
+	lookup x,[ 0, 0, 0, 0, 0, 5,10,20,30],blankd
+	lookup x,[30,20,10, 5, 0, 0, 0, 0, 0],brankd
+return

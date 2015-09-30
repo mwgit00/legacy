@@ -1,0 +1,258 @@
+#ifndef _PAUX_T_
+#define _PAUX_T_
+
+#include <aA2D.tea>
+#include <aCompass.tea>
+#include <aMulti.tea>
+
+
+
+int islt(int a, int b)
+{
+   return (a < b);
+}
+
+
+
+int isgt(int a, int b)
+{
+   return (a > b);
+}
+
+
+
+int auxMedian(int x1, int x2, int x3)
+{
+    int temp = 0;
+    
+    // bubble sort 3 ints
+    // return median
+    
+    if (isgt(x1, x2))
+    {
+        temp = x2;
+        x2 = x1;
+        x1 = temp;
+    }
+
+    if (isgt(x2, x3))
+    {
+        temp = x3;
+        x3 = x2;
+        x2 = temp;
+    }
+
+    if (isgt(x1, x2))
+    {
+        temp = x2;
+        x2 = x1;
+        x1 = temp;
+    }
+
+    return x2;
+}
+
+
+
+int headingError(int angDesired, int angCompass)
+{
+   int err;
+   err = angDesired - angCompass;
+   if (isgt(err, 1800))
+   {
+      err = err - 3600;
+   }
+   else if (islt(err, -1800))
+   {
+      err = err + 3600;
+   }
+   return err;
+}
+
+
+
+void rotateToHeading(int ang, int v)
+{
+    int err = 0;
+    int signInit;
+    
+    err = headingError(ang, aCompass_ReadInt());
+    signInit = aMath_Signum(err);
+    
+    // start rotating based on sign of error
+    moEnableWheels(X_ENA);
+    moGo(signInit * v, (-signInit) * v);
+
+    // we'll know we're done when sign of error changes
+    while (1)
+    {
+        err = headingError(ang, aCompass_ReadInt());
+        if (signInit != aMath_Signum(err))
+        {
+            break;
+        }
+    }
+    
+    moGo(0, 0);
+}
+
+
+
+int relHeading(int h, int offset)
+{
+    int newAng;
+    newAng = h + offset;
+    if (isgt(newAng, 3600))
+    {
+        newAng = newAng - 3600;
+    }
+    else if (islt(newAng, 0))
+    {
+        newAng = newAng + 3600;
+    }
+    return newAng;
+}
+
+
+
+// when viewed from top
+// positive is CW
+// negative is CCW
+void rotateRel(int ang, int v)
+{
+    rotateToHeading(relHeading(aCompass_ReadInt(), ang * 10), v);
+}
+
+
+
+#define GPX 320
+int auxMedianA2D(char n)
+{
+    int x1 = 0;
+    int x2 = 0;
+    int x3 = 0;
+
+    aCore_Sleep(GPX);
+    x1 = aA2D_ReadInt(n);
+    aCore_Sleep(GPX);
+    x2 = aA2D_ReadInt(n);
+    aCore_Sleep(GPX);
+    x3 = aA2D_ReadInt(n);
+    
+    return auxMedian(x1, x2, x3);
+}
+
+
+
+void testFront()
+{
+    int r4;
+    int r3;
+    int rx;
+    
+    while (1)
+    {
+        r4 = aA2D_ReadInt(4);
+        r3 = aA2D_ReadInt(3);
+        rx = aSRF08_RangeInt((unsigned char)SX, aSRF08_CM);
+        aPrint_IntDec(r4);
+        aPrint_Char(',');
+        aPrint_IntDec(r3);
+        aPrint_Char(',');
+        aPrint_IntDec(rx);
+        aPrint_Char('\n');
+    }
+}
+
+
+
+void buzz(int n, int t)
+{
+    int i;
+    for (i = 0; i != n; i++)
+    {
+        aDig_Write(DIG_BUZZER, 1);
+        aCore_Sleep(t);
+        aDig_Write(DIG_BUZZER, 0);
+        aCore_Sleep(t);
+    }
+}
+
+
+
+void beep(int k)
+{
+    int i;
+    int j;
+    for (i = 0; i != k; i++)
+    {
+        for (j = 0; j != 100; j++)
+        {
+            asm
+            {
+                pushlb  1
+                popbm   DIG_BUZZER_IOPORT
+                pushlb  0
+                popbm   DIG_BUZZER_IOPORT
+            }
+        }
+        aCore_Sleep(200);
+    }
+}
+
+
+
+int debounce(int ct, int f)
+{
+    if (f == 1)
+    {
+        ct = ct + 1;
+    }
+    else
+    {
+        ct = 0;
+    }
+    return ct;
+}
+
+
+
+void waitForButton()
+{
+    int k = 0;
+    while (k != 10)
+    {
+        // debounce active low
+        k = debounce(k, (aDig_ReadInt(DIG_BUTTON) == 0));
+
+        // emit beeps if beacon detectors are triggered
+        // (for calibration)
+        if ((aDig_ReadChar(DIG_R_BEACON) == 0) || (aDig_ReadChar(DIG_L_BEACON) == 0))
+        {
+            beep(1);
+        }
+        
+        aCore_Sleep(20);
+    }
+    buzz(100, 5);
+}
+
+
+/*
+void moveElbowDown(int thr)
+{
+    int i;
+    int ct = 0;
+    
+    // start from elbow up to home
+    // signal from sensor will increase as arm lowers
+    for (i = ELBOW_UP; i < ELBOW_HOME; i = i + 4)
+    {
+        moMoveElbow(i);
+        if (isgt(auxMedianA2D(A2D_CLAWS), thr)) ct++;
+        if (isgt(ct, 3)) break;
+    }
+}
+*/
+
+#endif // _PAUX_T_

@@ -1,0 +1,32 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+
+#include "pmo.tea"
+
+void main ()
+{
+    // be sure we are stopped
+    moEnableWheels (X_OFF);
+
+    aPrint_String ("Wait 3 seconds...\n");
+    aCore_Sleep (30000);
+
+    // ready to go
+    moEnableWheels (X_ENA);
+
+    while (1)
+    {
+        aPrint_String ("F\n");
+        moGo (100, 100);
+        aCore_Sleep (30000);
+        aPrint_String ("R\n");
+        moGo (-100, -100);
+        aCore_Sleep (30000);
+        aPrint_String ("TurnL\n");
+        moGo (-100, 100);
+        aCore_Sleep (30000);
+        aPrint_String ("TurnR\n");
+        moGo (100, -100);
+        aCore_Sleep (30000);
+    }
+}

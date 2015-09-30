@@ -1,0 +1,164 @@
+' {$STAMP BS1}
+' {$PBASIC 1.0}
+
+SYMBOL u1_prev_pin0 = BIT0
+SYMBOL u8_temp = B1
+SYMBOL u8_step = B2
+SYMBOL u8_user = B3
+SYMBOL u8_alarm_ct = B4
+SYMBOL u16_weekly_step_ct = W4
+SYMBOL u16_seconds_count = W5
+
+SYMBOL c_u8_step_reset = %10000000
+SYMBOL c_u8_step_limit = %00001111
+SYMBOL c_u8_alarm_off =  %00001000
+
+SYMBOL C_ALARM_PIN = 3
+
+
+' ticks divisor is week-based to get an integer count
+' 86400 sec-per-day
+' 108 / 14 rev-per-day
+' 20 steps-per-rev
+' (20 * (108 / 14)) * 7 = 1080 steps-per-week
+' (86400 * 7) / 1080 = 560 sec-per-step (9.333 minutes)
+SYMBOL C_SECONDS_PER_STEP = 560
+SYMBOL C_STEPS_PER_WEEK = 1080
+
+
+
+' -----------------------------
+
+SETUP:
+
+  INPUT 0 ' 1sec time-base clock input
+  INPUT 1 ' manual step activation input (active high)
+  INPUT 2 ' unused
+
+  HIGH C_ALARM_PIN ' alarm off (active low)
+  u8_alarm_ct = 0  ' no countdown for turning alarm off
+
+  ' set stepper pins off (active high)
+  LOW 4
+  LOW 5
+  LOW 6
+  LOW 7
+
+  ' at power-on the weekly step count is 0
+  u16_weekly_step_ct = 0
+
+  ' step sequence start is arbitrary
+  u8_step = c_u8_step_reset
+
+
+' -----------------------------
+
+MAIN_RESTART:
+
+  u1_prev_pin0 = PIN0
+  u16_seconds_count = 0
+  u8_user = 0
+  u8_alarm_ct = 0
+
+
+' -----------------------------
+
+MAIN:
+
+  ' check for user pressing clock override input
+  IF PIN1 = 1 THEN MAIN_MANUAL_CLOCK
+
+  ' check for change on 1-sec clock input
+  IF PIN0 <> u1_prev_pin0 THEN MAIN_DIVIDE_CLOCK
+
+  GOTO MAIN
+
+
+MAIN_DIVIDE_CLOCK:
+
+  ' stash previous state of clock pin
+  u1_prev_pin0 = PIN0
+
+  IF u8_alarm_ct = 0 THEN MAIN_DIVIDE_CLOCK_NO_ALARM
+  u8_alarm_ct = u8_alarm_ct - 1
+  GOTO MAIN_DIVIDE_CLOCK_CHECK_FOR_STEP
+
+MAIN_DIVIDE_CLOCK_NO_ALARM:
+
+  HIGH C_ALARM_PIN ' make sure alarm is off
+
+MAIN_DIVIDE_CLOCK_CHECK_FOR_STEP:
+
+  ' count seconds and check for rollover
+  u16_seconds_count = u16_seconds_count + 1
+  IF u16_seconds_count < C_SECONDS_PER_STEP THEN MAIN
+  u16_seconds_count = 0
+
+MAIN_DIVIDE_CLOCK_STEP:
+
+  ' do one step and check for weekly step count that matches an alarm time
+  GOSUB SR_STEP
+  u8_temp = 255 ' initialize as not found
+  LOOKDOWN u16_weekly_step_ct, (0, 154, 309, 463, 617, 771, 926), u8_temp
+  IF u8_temp = 255 THEN MAIN
+
+MAIN_DIVIDE_CLOCK_ALARM:
+
+  LOW C_ALARM_PIN ' count matches an alarm time so activate alarm for 30 sec.
+  u8_alarm_ct = 30
+  GOTO main
+
+
+MAIN_MANUAL_CLOCK:
+
+  GOSUB SR_STEP
+
+  ' after a few ticks the loop will be speeded up
+  IF u8_user = 5 THEN MAIN_MANUAL_CLOCK_LOOP
+  u8_user = u8_user + 1
+  PAUSE 1000
+
+MAIN_MANUAL_CLOCK_LOOP:
+
+  PAUSE 40
+  IF PIN1 = 1 THEN MAIN_MANUAL_CLOCK
+
+  ' user is no longer pressing button so reset main loop
+  GOTO MAIN_RESTART
+
+
+
+' -----------------------------
+SR_STEP:
+
+  ' advance weekly step count
+  ' check for weekly rollover
+  u16_weekly_step_ct = u16_weekly_step_ct + 1
+  IF u16_weekly_step_ct < C_STEPS_PER_WEEK THEN SR_STEP_MOVE
+  u16_weekly_step_ct = 0
+
+SR_STEP_MOVE:
+
+  ' activate coil (keep alarm off)
+  PINS = u8_step | c_u8_alarm_off
+  'DEBUG PINS
+  PAUSE 80
+
+  ' then be sure all coils are off (keep alarm off)
+  PINS = %00000000 | c_u8_alarm_off
+  'DEBUG PINS
+
+  ' advance step counter for next coil activation, i.e.
+  ' 1000
+  ' 0100
+  ' 0010
+  ' 0001
+  ' repeat
+
+  u8_step = u8_step / 2
+  IF u8_step > c_u8_step_limit THEN SR_STEP_RETURN
+  u8_step = c_u8_step_reset
+
+SR_STEP_RETURN:
+
+  RETURN

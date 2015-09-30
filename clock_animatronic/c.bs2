@@ -1,0 +1,194 @@
+' {$STAMP BS2}
+' {$PORT COM1}
+
+' Main Program for Weird Clock Project
+' Mark R. Whitney
+' May 2006
+
+N2400           CON   16780      ' inverted, 2400 baud, 8-bit, no parity
+TRIGGER_T       CON   100        ' time (ms) to activate motor "relays"
+DUTY            CON   64         ' duty cycle (0-255) for activating motor "relays"
+
+OUT_MIN_10      VAR   OUTB       ' tens digit of minutes display
+OUT_MIN_1       VAR   OUTA       ' ones digit of minutes display
+OUT_AUX_CTRL    CON   8          ' serial control of stepper and aux outputs
+IN_MIN_CT       VAR   IN12       ' minute counter input
+IN_BTN          VAR   IN13       ' push button
+OUT_FIRE        CON   14         ' motor "relay" to say fire
+OUT_REV         CON   15         ' motor "relay" to make rev sound
+
+vb_t_minutes      VAR   Byte     ' current time
+vb_t_hours        VAR   Byte
+vb_a_minutes      VAR   Byte     ' alarm time
+vb_a_hours        VAR   Byte
+vb_temp           VAR   Byte
+vb_tx2            VAR   Byte
+vb_tx3            VAR   Byte
+
+
+'----------------------------------------------------------
+main:
+
+  ' minute nibbles are all outputs
+  DIRL = %11111111
+
+    GOSUB sr_wait_for_btn
+GOSUB sr_advance_hours
+  GOTO sr_test_aux
+
+  vb_t_minutes = 59
+  vb_t_hours = 23
+  vb_a_minutes = 0
+  vb_a_hours = 0
+  sheiss:
+  GOSUB sr_write_t_minutes
+
+  PAUSE 5000                     ' put hour display in valid position
+  GOSUB sr_advance_hours         ' (user must then manually set it)
+  vb_t_minutes = vb_t_minutes + 1
+  GOTO sheiss
+
+main_set:
+
+  GOSUB sr_wait_for_btn
+
+  ' set routine goes here
+
+  vb_tx2 = 1                  ' turn on hours illuminator
+  GOSUB sr_set_hours_LED
+
+main_chk_minutes:
+
+  ' tight loop to poll minute input
+  ' a high means one minute has elapsed (second hand over opto-sensor)
+  IF IN_MIN_CT=0 THEN main_chk_minutes
+
+  ' handle minute count and roll-over
+  vb_t_minutes = vb_t_minutes + 1
+  IF vb_t_minutes < 60 THEN main_update_minutes_display
+  vb_t_minutes = 0
+  vb_t_hours = vb_t_hours + 1
+  GOSUB sr_advance_hours
+
+  ' handle 24-hour count and roll-over
+  IF vb_t_hours < 24 THEN main_update_minutes_display
+  vb_t_hours = 0
+
+main_update_minutes_display:
+  GOSUB sr_write_t_minutes
+
+main_check_alarm:
+  ' when minutes and hours match alarm time then sound alarm
+  ' only sound alarm for less than a minute else a minute input may be missed
+  IF vb_t_minutes <> vb_a_minutes THEN main_done
+  IF vb_t_hours <> vb_a_hours THEN main_done
+  PAUSE 500
+  GOSUB sr_alarm
+  GOSUB sr_alarm
+  GOSUB sr_alarm
+  GOTO main_chk_minutes
+
+main_done:
+  ' (maybe do a "chime" here)
+  ' always leave enough time for second hand to leave opto-sensor
+  PAUSE 5000
+  GOTO main_chk_minutes
+
+
+'----------------------------------------------------------
+
+sr_write_t_minutes:
+  ' write time minutes to 7-segment LED control outputs
+  vb_temp = vb_t_minutes // 10
+  OUT_MIN_1 = vb_temp
+  vb_temp = vb_t_minutes / 10
+  OUT_MIN_10 = vb_temp
+  RETURN
+
+sr_write_t_hours:
+  ' write time hours to 7-segment LED control outputs
+  vb_temp = vb_t_hours // 10
+  OUT_MIN_1 = vb_temp
+  vb_temp = vb_t_hours / 10
+  OUT_MIN_10 = vb_temp
+  RETURN
+
+sr_write_a_minutes:
+  ' write alarm minutes to 7-segment LED control outputs
+  vb_temp = vb_a_minutes // 10
+  OUT_MIN_1 = vb_temp
+  vb_temp = vb_a_minutes / 10
+  OUT_MIN_10 = vb_temp
+  RETURN
+
+sr_write_a_hours:
+  ' write alarm hours to 7-segment LED control outputs
+  vb_temp = vb_a_hours // 10
+  OUT_MIN_1 = vb_temp
+  vb_temp = vb_a_hours / 10
+  OUT_MIN_10 = vb_temp
+  RETURN
+
+sr_alarm:
+  GOSUB sr_say_fire_lets_go
+  GOSUB sr_make_motor_rev_sound
+  RETURN
+
+sr_say_fire_lets_go:
+  PWM OUT_FIRE, DUTY, TRIGGER_T
+  PAUSE 8000
+  RETURN
+
+sr_make_motor_rev_sound:
+  PWM OUT_REV, DUTY, TRIGGER_T
+  PAUSE 8000
+  RETURN
+
+sr_advance_hours:
+  vb_tx2 = 0
+  vb_tx3 = 0
+  SEROUT  OUT_AUX_CTRL, N2400, ["A", vb_tx2, vb_tx3]
+  RETURN
+
+sr_ctrl_mouth:
+  vb_tx2 = 64
+  vb_tx3 = 50
+  SEROUT  OUT_AUX_CTRL, N2400, ["X", vb_tx2, vb_tx3]
+  RETURN
+
+sr_ctrl_nose:
+  vb_tx2 = 64           ' apply 25% power
+  vb_tx3 = 100          ' for roughly half a second
+  SEROUT  OUT_AUX_CTRL, N2400, ["Y", vb_tx2, vb_tx3]
+  RETURN
+
+sr_set_hours_LED:
+  vb_tx3 = 0
+  SEROUT  OUT_AUX_CTRL, N2400, ["Z", vb_tx2, vb_tx3]
+  RETURN
+
+sr_wait_for_btn:
+  IF IN_BTN = 1 THEN sr_wait_for_btn
+  RETURN
+
+
+'----------------------------------------------------------
+
+sr_test_aux:
+
+  GOSUB sr_ctrl_mouth
+  PAUSE 1000
+  GOSUB sr_ctrl_nose
+  PAUSE 1000
+
+  vb_tx2 = 1
+  GOSUB sr_set_hours_LED
+  PAUSE 500
+  vb_tx2 = 0
+  GOSUB sr_set_hours_LED
+
+  PAUSE 2000
+
+  GOTO sr_test_aux
+
+  RETURN

@@ -1,0 +1,73 @@
+#ifndef _PAUX_T_
+#define _PAUX_T_
+
+#include "pdefs.tea"
+
+
+
+int islt(int a, int b)
+{
+   return (a < b);
+}
+
+
+
+int isgt(int a, int b)
+{
+   return (a > b);
+}
+
+
+
+void buzz(int n, int t)
+{
+    int i;
+    for (i = 0; i != n; i++)
+    {
+        asm
+        {
+            pushlb  1
+            popbm   DIG_BUZZER_IO
+        }
+        aCore_Sleep(t);
+        asm
+        {
+            pushlb  0
+            popbm   DIG_BUZZER_IO
+        }
+        aCore_Sleep(t);
+    }
+}
+
+
+
+void beep(int k)
+{
+    int i;
+    int j;
+    for (i = 0; i != k; i++)
+    {
+        for (j = 0; j != 100; j++)
+        {
+            asm
+            {
+                pushlb  1
+                popbm   DIG_BUZZER_IO
+                pushlb  0
+                popbm   DIG_BUZZER_IO
+            }
+        }
+        aCore_Sleep(200);
+    }
+}
+
+
+
+void fart()
+{
+   buzz(12, 200);
+   buzz(8, 400);
+   buzz(4, 600);
+}
+
+#endif // _PAUX_T_

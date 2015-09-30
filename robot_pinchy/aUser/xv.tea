@@ -1,0 +1,34 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aA2D.tea>
+#include <aMath.tea>
+
+#include "pdefs.tea"
+
+#define CT_STALL    200
+
+// file 7
+
+void main()
+{
+    int x0;
+    int ct = CT_STALL;
+    char foo = 0;
+    int a = 1;
+    
+    // endless loop
+    while(1)
+    {
+        x0 = aA2D_ReadInt(A2D_STALL);
+        if ((x0 > 222) && (foo == 1)) { ct = CT_STALL; foo = 0; }
+        if ((x0 < 136) && (foo == 0)) { ct = CT_STALL; foo = 1; }
+        ct--;
+        if (ct == 0)
+        {
+            ct = CT_STALL;
+            aPrint_IntDec(a); a = -a;
+            aPrint_Char('\n');
+            aCore_Sleep(2000);
+        }
+    }
+}

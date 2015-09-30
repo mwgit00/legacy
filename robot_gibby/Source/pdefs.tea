@@ -1,0 +1,45 @@
+#ifndef _PDEFS_T_
+#define _PDEFS_T_
+
+
+// MOTORS
+#define X_WHEEL_L           0
+#define X_WHEEL_R   	    1
+
+#define X_CFG_WHEEL_L       0x80 // invert
+#define X_CFG_WHEEL_R       0xC0 // normal
+#define X_LMT_WHEEL_L       0x1323 // (offset = 0x13, range=0x23)
+#define X_LMT_WHEEL_R       0x1323 // (offset = 0x13, range=0x23)
+
+#define X_ENA               ((unsigned char)0xFF)
+#define X_OFF               0x00
+
+
+// A2D
+#define A2D_RNG_L           0
+#define A2D_RNG_L_RD        0x0480 // 0x0480 + 0*2
+#define A2D_RNG_R           1
+#define A2D_RNG_R_RD        0x0482 // 0x0480 + 1*2
+
+
+// DIGITAL I/O
+#define DIG_EZ1_RX          0
+#define DIG_EZ1_RX_CFG      0x0500 // 0x0500 + 0*4 + 0
+#define DIG_EZ1_RX_IO       0x0501 // 0x0500 + 0*4 + 1
+#define DIG_EZ1_PW          1
+#define DIG_EZ1_PW_CFG      0x0504 // 0x0500 + 1*4 + 0
+#define DIG_EZ1_PW_PTIME    0x0506 // 0x0500 + 1*4 + 2
+#define DIG_BUTTON          3
+#define DIG_BUTTON_IO       0x050D // 0x0500 + 3*4 + 1
+#define DIG_BUZZER          4
+#define DIG_BUZZER_CFG      0x0510 // 0x0500 + 4*4 + 0
+#define DIG_BUZZER_IO       0x0511 // 0x0500 + 4*4 + 1
+
+#define DIG_CODE_OUTPUT     0x0
+#define DIG_CODE_HIGH_TMR   0x19   // 16 (width) | 8 (high) | 1 (input)
+
+
+// PAD I/O
+#define PAD_GO              0
+
+#endif // _PDEFS_T_

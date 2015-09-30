@@ -1,0 +1,294 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aA2D.tea>
+
+#include "CamLib.tea"
+#include "MotorLib.tea"
+
+
+// control mode
+#define TURN_ENABLED    0
+
+
+
+#define KI 8 // Y integral gain param
+#define KP 8 // Y proportional gain param
+
+#define VX0     16
+#define KX0     25
+#define KX1     140
+#define VX1     60
+#define VPREF   60
+#define VPIVOT  25
+#define VSLOW   15
+#define VMED    30
+
+#define SERVO_HEAD          0
+#define SERVO_HEAD_HOME     /*55*/64
+
+#define A_CLAW_PROX         4
+#define CLAW_PROX_LMT       450
+
+
+
+// Hot Pink RGB bounds
+// (saturated red, negligible blue and green)
+#define PINKR   0x5AF0  // 90 240
+#define PINKG   0x1018  // 16 24
+#define PINKB   0x1018  // 16 24
+
+
+
+// global absolute addressable buffer
+// for holding serial data from CMUcam
+// the buffer starts at absolute stack address 0
+unsigned char b00=0;
+unsigned char b01=0;
+unsigned char b02=0;
+unsigned char b03=0;
+unsigned char b04=0;
+unsigned char b05=0;
+unsigned char b06=0;
+unsigned char b07=0;
+unsigned char b08=0;
+unsigned char b09=0;
+unsigned char b10=0;
+unsigned char b11=0;
+unsigned int w12=0;
+unsigned int w14=0;
+unsigned int w16=0;
+
+
+
+void nod(int t)
+{
+    int i;
+    for (i = SERVO_HEAD_HOME; i < SERVO_HEAD_HOME + 30; i++)
+    {
+        camRawMoveServo(SERVO_HEAD, (unsigned char)i);
+        aCore_Sleep(t);
+    }
+    for (i = SERVO_HEAD_HOME + 30; i > SERVO_HEAD_HOME; i--)
+    {
+        camRawMoveServo(SERVO_HEAD, (unsigned char)i);
+        aCore_Sleep(t);
+    }
+}
+
+
+
+int rail(int x, int min, int max)
+{  
+    if (x < min) x = min;
+    if (x > max) x = max;
+    return x;
+}
+
+
+
+void chase()
+{
+    int x;
+    int y;
+    int erry;
+    int errx;
+    int v;
+    int vx;
+    int vgain;
+
+    // must initialize these
+    int k = 0;
+    int goFlag = 1;
+    int headpos = SERVO_HEAD_HOME;
+
+    while (goFlag)
+    {
+        if (headpos <= 56)
+        {
+            // slow speed when closer (needs less gain)
+            v = VX0;
+            vgain = KX0;
+        }
+        else
+        {
+            // fast speed when far away (needs more gain)
+            v = VX1;
+            vgain = KX1;
+        }
+
+        camRawTrack();
+        x = b02 & 0x00FF;
+        y = b03 & 0x00FF;
+        if (b08 > 0)
+        {
+            // head error
+            erry = (72 - y);
+            
+            // "integral" error term
+            // accumulate +1/-1 based on erry till it reaches bounds
+            // divide by bounds to get a +1 or -1 offset to error
+            // that will gradually compensate for steady-state error
+            if ((erry > 0) && (k <  KI)) k = k + 1;
+            if ((erry < 0) && (k > -KI)) k = k - 1;
+            
+            // proportional-integral control for neck
+            // with bounded head servo movement
+            headpos = headpos + (erry/KP) + (k/KI);
+            headpos = rail(headpos, 46, /*68*/108);
+            camRawMoveServo(SERVO_HEAD, (unsigned char)headpos);
+
+            // proportional control for steering
+            errx = (x - 45);
+            vx = (errx * vgain) / 100;
+
+            // steer with forward velocity
+            steer(vx, v);
+
+            // head motions need a delay
+            // without it they are unstable
+            aCore_Sleep(50);
+        }
+                
+        // break when we get close enough to ball
+        if (aA2D_ReadInt(A_CLAW_PROX) > CLAW_PROX_LMT)
+        {
+            go(0, 0);
+            goFlag = 0;
+        }
+    }
+}
+
+
+
+void waitForColor()
+{
+    while (1)
+    {
+        camRawTrack();
+        if (b08 > 0) break;
+    }
+}
+
+
+
+void home()
+{
+    int x;
+    int errx;
+    int misses = 0;
+
+    // acquire pink straight ahead
+    // (robot can already be rotating)
+    while (1)
+    {
+        camRawTrack();
+        if (b08 > 0) break;
+    }
+    
+    // start undoing that CCW spin
+    go(VPIVOT, -VPIVOT);
+    
+    // then try to roll home
+    // we are done after 10 consecutive non-tracks
+    // (user must hide home target so robot knows to stop)
+    while (misses < 10)
+    {
+        camRawTrack();
+        x = b02 & 0x00FF;
+        if (b08 > 0)
+        {
+            misses = 0;
+            
+            // proportional control for steering
+            errx = ((x - 45) * KX1) / 100;
+            steer(errx, VX1);
+        }
+        else
+        {
+            steer(0, VX1);
+            misses++;
+        }
+    }
+}
+
+
+
+void fetch()
+{
+    // go after ball
+    chase();
+    
+    // pinch and back out a bit
+    // put head up to look for home target (not ball)
+    enable_arms(1);
+    moveClaw(CLAW_GRIP);
+    aCore_Sleep(10000);
+    camRawMoveServo(SERVO_HEAD, SERVO_HEAD_HOME + 20);
+    go(-VPREF, -VPREF);
+    aCore_Sleep(15000);
+    
+    // turn to go back
+    // just go CCW for now
+    // must go slow to keep from turning too far before detecting target
+    go( -VPIVOT, VPIVOT);
+    
+    // start for home once target is spotted
+    home();
+    
+    // once target is hidden go straight and
+    // open claw and roll a bit to push ball back to user
+    go(VPREF, VPREF);
+    moveClaw(CLAW_OPEN);
+    aCore_Sleep(1000);
+    go(0, 0);
+    
+    // cop some attitude
+    nod(100);
+    nod(100);
+}
+
+
+
+void main()
+{
+    // motors to start positions and default config
+    configServos();
+    moveClaw(CLAW_OPEN);
+
+    // robot must start in direction of playing field
+    // this sets camera params and gives time to adjust
+    // (nod to let user know when ready)
+    camInit();
+    nod(100);
+    nod(100);
+    
+    // turn to user
+    go(10, VPREF);
+    aCore_Sleep(25000);
+    go(0, 0);
+
+    // set params for pink ball
+    camRawSetTrack(PINKR, PINKG, PINKB);
+
+    // play time!
+    while (1)
+    {
+        enable_arms(0);
+        
+        // quick nod when ball is spotted
+        waitForColor();
+        nod(50);
+        nod(50);
+        
+        // turn to face playing field
+        go(-10, -VPREF);
+        aCore_Sleep(25000);
+        go(0, 0);
+        
+        // wait for ball then go get it
+        fetch();
+        
+        // give user time to prepare
+        aCore_Sleep(30000);
+    }
+}

@@ -1,0 +1,67 @@
+' FIRE-FIGHTER PROGRAM 1 -- NAVIGATION
+'
+' 1-17-2000 begin
+' 1-30-2000 turning tests
+' 2-07-2000 switched from 90 deg to 180 deg range
+' 2-10-2000 wallhug experiments
+' 2-13-2000 new ankles and tweaked walk
+' 2-15-2000 tried head head-start for walk
+' 3-02-2000 tested fan motor activation
+' 3-04-2000 candle tests
+' 3-05-2000 upgrade to BS2-SX
+' 3-17-2000 tail
+' 4-01-2000 navigation code with rotates
+
+
+x	var	byte
+a	var	byte
+b	var	byte
+c	var	byte
+d	var	byte
+
+
+'-----------------------------------------------
+
+navb	con	4		' bytes per navigation record
+
+wpt1a	data	4,100,0,0	' hug into room 1
+'wpt1b	data	5,1,0,0		' back up a few steps
+wpt1c	data	1,2,45,0	' rotate 160 degrees
+wpt1d	 data	3,10,0,0	' walk straight to acquire wall
+wpt1e	data	1,1,50,0	' rotate 90 degrees
+wpt2a	data	4,100,0,0	' hug into room 2
+wpt2b	data	1,2,58,0	' rotate 180+ degrees
+wpt3a	data	4,100,0,0	' hug into room 3
+wpt3b	data	1,2,58,0	' rotate 180+ degrees
+wpt4a	data	4,100,0,0	' hug into room 4
+wptend	data	255,255,255,255
+
+'-----------------------------------------------
+
+enterprogram1:
+
+	' retrieve waypoint
+
+	get 10,x
+
+	' lookup walk data for current waypoint
+
+	x=x*navb
+	read x  ,a
+	read x+1,b
+	read x+2,c
+	read x+3,d
+
+	if a=255 then allstop
+
+	put 0,a		' walk type
+	put 1,b		' maximum reps
+	put 2,c		' walk param 1
+	put 3,d		' walk param 2
+
+	run 4
+
+allstop:
+
+	run 7		' idle beeping mode
+end

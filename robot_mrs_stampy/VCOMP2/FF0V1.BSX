@@ -1,0 +1,283 @@
+' FIRE-FIGHTER PROGRAM 0 -- INITIALIZATION AND TEST
+'
+' 1-17-2000 begin
+' 1-30-2000 turning tests
+' 2-07-2000 switched from 90 deg to 180 deg range
+' 2-10-2000 wallhug experiments
+' 2-13-2000 new ankles and tweaked walk
+' 2-15-2000 tried head head-start for walk
+' 3-02-2000 tested fan motor activation
+' 3-04-2000 candle tests
+' 3-05-2000 upgrade to BS2-SX
+' 3-17-2000 wall hug with tail
+
+
+' general purpose variables
+
+i	var	byte
+ii	var	byte
+n1	var	byte
+n2	var	byte
+x	var	nib
+y	var	nib
+j	var	nib
+ww	var	word
+wmin	var	word
+wmax	var	word
+posh	var	byte
+
+' prox variables
+
+ir0	var	byte
+ir1	var	byte
+irw	var	byte	' wall checker
+irf	var	byte	' forward checker
+nnmiss	var	nib
+nncurv	var	nib
+hugok	var	bit
+hugno	var	bit
+hugcrv	var	bit
+
+
+' servo control parameters
+
+sync	con	255
+ssc2	con	7	' pin 7 (use another pin to disable servos)
+svo	con	0
+n96n	con	16624	' BS2-SX
+
+
+' fire-fighting
+
+fanmtr	con	11	' fan relay output
+ifuze	con	0	' candle proximity fuze input
+iseek	con	1	' candle direction sensor input
+fsweep	con	90	' +- range for candle scan
+fswptm	con	15	' sweep step delay time
+fswbak	con	30	' amount to swing back before fan on
+
+
+' body servo IDs
+
+svhead	con	3
+svlank	con	0
+svrank	con	7
+svlhip	con	1
+svrhip	con	6
+
+' body home positions
+
+hmhead	con	132	'
+hmlank	con	121'123	'
+hmrank	con	139'137	'
+hmlhip	con	127	'
+hmrhip	con	122	'
+hmhipd	con	5	' left home is 5 more than right home
+
+' beep stuff
+
+beep	con	12
+beepgnd	con	13
+
+
+' wall hug test variables
+
+blankd	var	byte
+brankd	var	byte
+pos1	var	byte
+pos2	var	byte
+
+'-----------------------------------------------
+
+
+
+begin:
+
+	' initialize
+
+	gosub sr_home
+
+	low beepgnd
+
+	freqout beep,200,600	' confirm power up
+	freqout beep,200,0
+	freqout beep,200,600
+
+'	gosub sr_delay_begin
+	gosub sr_waitfortone_begin
+
+'run 5
+
+	'goto candle_test
+	'goto prox_test_f
+	'goto prox_test_w
+	'goto prox_test_h
+	'goto line_test
+	'goto flame_test
+
+	put 10,0	' start at waypoint 0
+	put 11,0	' set last step as left (doesn't matter)
+	put 62,1	' return program is navigate
+	run 1	
+
+end
+
+
+
+
+
+'-----------------------------------------------------------------
+
+sr_home:
+	debug "home",cr
+	for i=1 to 10
+		serout ssc2,n96n,[sync,svhead,hmhead]
+		serout ssc2,n96n,[sync,svlhip,hmlhip,sync,svrhip,hmrhip]
+		serout ssc2,n96n,[sync,svlank,hmlank,sync,svrank,hmrank]
+	next
+	pause 100
+return
+
+
+sr_delay_begin:
+	pause 400
+	for i=1 to 6
+		ww=i*50+300
+		freqout beep,200,ww
+		pause 900
+	next
+	return
+
+
+sr_waitfortone_begin:
+
+	pause 500
+	freqout beep,200,700	' confirm tone mode
+	freqout beep,200,0
+	freqout beep,200,700
+
+sr_waitfortone:
+	'
+	' calibrated to match my beeper (3687 HZ +- 5%)
+	'
+	count 2,200,ww
+	if ww>280 and ww<310 then sr_waitfortone_done
+	goto sr_waitfortone
+	sr_waitfortone_done:
+		return
+
+
+flame_test:
+	debug dec in3,cr
+	goto flame_test
+
+line_test:
+'	pulsin 5,1,ww
+'	freqout beep,200,ww+200
+'	goto line_test
+
+'	pulsin 5,1,ww
+'	debug dec ww,cr
+'	pause 500
+'	goto line_test
+	'
+	' loop sampling test
+	'
+	freqout beep,200,300
+	wmin=65535
+	wmax=0
+	for i=1 to 100
+		pulsin 5,1,ww
+		wmin=ww max wmin
+		wmax=ww min wmax
+		pause 5
+	next
+	ww=wmax-wmin
+'	debug dec wmax, " " ,dec wmin, " ",dec ww,cr
+	debug dec ww,cr
+'	if ww<100 then line_test_none
+'		freqout beep,500,400
+'	line_test_none
+	pause 500
+	goto line_test
+
+candle_test:
+	ww=(NCD(ina&3))*100+300
+'	debug dec in0, dec in1, cr
+	freqout beep,50,ww
+	goto candle_test
+
+prox_test_w:
+	gosub sr_prox_w
+	gosub sr_hugcalc
+	debug dec irw,",",dec brankd,",",dec blankd," ",dec nnmiss," ", dec nncurv, cr
+	pause 100
+	goto prox_test_w
+
+prox_test_f:
+	gosub sr_prox_f
+	debug dec irf,cr
+	pause 100
+	goto prox_test_f
+
+prox_test_h:
+	debug dec in5,cr
+	goto prox_test_h
+
+
+sr_square:
+	'
+	' find angle that yields minimum
+	' rotate to compensate
+	'
+	serout ssc2,n96n,[sync,svhead,hmhead-40]
+	pause 200
+	pos1=0
+	pos2=0
+	for i=1 to 80
+		gosub sr_prox_f
+		if irf<pos1 then sr_square_x
+			pos1=irf
+			pos2=i
+		sr_square_x:
+		serout ssc2,n96n,[sync,svhead,hmhead-40+i]
+		pause 20
+debug dec irf, " ", dec pos2, cr
+	next
+	n1=pos2-40
+debug dec n1,cr
+end
+
+
+
+
+sr_prox_w:
+	low 6
+	sr_prox_w_wait:
+		if in8=0 then sr_prox_w_wait
+	shiftin 8,6,MSBPOST,[irw\8]
+	high 6
+return
+
+sr_prox_f:
+	low 10
+	sr_prox_f_wait:
+		if in9=0 then sr_prox_f_wait
+	shiftin 9,10,MSBPOST,[irf\8]
+	high 10
+return
+
+sr_hugcalc:
+
+	lookdown irw,>=[65,0],hugno
+	lookdown irw,>=[82,0],hugcrv
+	nnmiss=(nnmiss+1) * hugno
+	nncurv=(nncurv+1) * hugcrv
+
+lookdown irw,<=[ 64, 73, 82, 88, 90, 93, 96, 99,102,105,110,121,255],x
+lookup x,      [  0,  0,  0,  0,  0,  0,  0,  0,  5, 10, 15, 20, 20],blankd
+lookup x,      [ 45, 35, 25, 20, 15, 10,  5,  0,  0,  0,  0,  0,  0],brankd
+
+return
+
+

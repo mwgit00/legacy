@@ -1,0 +1,112 @@
+' {$STAMP BS1}
+' {$PORT COM6}
+
+SYMBOL u1_prev_pin0 = BIT0
+SYMBOL u16_count = W2
+SYMBOL u8_step = B6
+SYMBOL u8_user = B7
+
+SYMBOL c_u8_step_reset = %00001000
+SYMBOL c_u8_step_limit = %00000000
+
+
+
+' -----------------------------
+
+SETUP:
+
+  INPUT 0 ' 1sec time-base clock input
+  INPUT 1 ' manual step activation input (active low)
+
+  ' set stepper pins to outputs and turn off
+  OUTPUT 4
+  OUTPUT 5
+  OUTPUT 6
+  OUTPUT 7
+  PINS = PINS & %00000000
+
+  u8_step = c_u8_step_reset
+
+
+' -----------------------------
+
+MAIN_RESTART:
+
+  u1_prev_pin0 = PIN0
+  u16_count = 0
+  u8_user = 0
+
+
+' -----------------------------
+
+MAIN:
+
+  ' check for user pressing clock override input
+  IF PIN1 = 0 THEN MAIN_MANUAL_CLOCK
+
+  ' check for change on 1-sec clock input
+  IF PIN0 <> u1_prev_pin0 THEN MAIN_DIVIDE_CLOCK
+
+  GOTO MAIN
+
+
+MAIN_DIVIDE_CLOCK:
+
+  ' stash previous state of clock pin
+  u1_prev_pin0 = PIN0
+
+  ' 86400 sec-per-day
+  ' 108 / 15 = 7.2 rev-per-day
+  ' 20 steps-per-rev
+  ' 20 * 7.2 = 144 steps-per-day
+  ' 86400 / 144 = 600 sec-per-step
+  u16_count = u16_count + 1
+  IF u16_count < 600 THEN MAIN
+  u16_count = 0
+  GOSUB SR_STEP
+  GOTO MAIN
+
+
+MAIN_MANUAL_CLOCK:
+
+  GOSUB SR_STEP
+
+  ' after 6 ticks the loop will be speeded up
+  IF u8_user = 6 THEN MAIN_MANUAL_CLOCK_LOOP
+  u8_user = u8_user + 1
+  PAUSE 1500
+
+MAIN_MANUAL_CLOCK_LOOP:
+
+  PAUSE 500
+  IF PIN1 = 0 THEN MAIN_MANUAL_CLOCK
+
+  ' user is no longer pressing button so reset main loop
+  GOTO MAIN_RESTART
+
+
+
+' -----------------------------
+SR_STEP:
+
+  ' activate coil
+  PINS = u8_step
+  PAUSE 200
+
+  ' then be sure all coils are off
+  PINS = %00000000
+
+  ' advance step counter for next coil activation, i.e.
+  ' 1000
+  ' 0100
+  ' 0010
+  ' 0001
+  ' repeat
+
+  u8_step = u8_step / 2
+  IF u8_step > c_u8_step_limit THEN SR_STEP_RETURN
+  u8_step = c_u8_step_reset
+
+SR_STEP_RETURN:
+
+  RETURN

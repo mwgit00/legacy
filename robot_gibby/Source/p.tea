@@ -1,0 +1,172 @@
+#include <aCore.tea>
+
+#include "pmo.tea"
+#include "paux.tea"
+
+#define THR_RS_OBSTACLE     750
+#define THR_HUG             220
+#define V_HUG1              75
+
+// three modes
+// optional modes selectable by extra button press at start up
+// 0 - right wall hug (default)
+// 1 - left wall hug
+// 2 - toggle wall hug
+//
+// right -> 1, A2D_RNG_R_RD
+// left ->  -1, A2D_RNG_L_RD
+
+
+int g_mode = 0;
+int g_sign = 1;
+int g_rPort = A2D_RNG_R_RD;
+
+
+
+void init()
+{
+    int i = 0;
+    
+    // be sure we are stopped
+    moEnableWheels(X_OFF);
+    
+    // buzzer is an output
+    aCore_Outportc (DIG_BUZZER_CFG, DIG_CODE_OUTPUT);
+    
+    // set up sonar nose
+    // configure EZ1 as high pulse width timer
+    // EZ1 RX line is brought high at start to enable continuous ranging
+    aCore_Outportc (DIG_EZ1_PW_CFG, DIG_CODE_HIGH_TMR);
+    aCore_Outportc (DIG_EZ1_RX_CFG, DIG_CODE_OUTPUT);
+    aCore_Outportc (DIG_EZ1_RX_IO, 1);
+    
+    // courtesy beep and wait for button
+    beep(2);
+    while (aCore_Inporti (DIG_BUTTON_IO) == 1)
+    {
+        // do nothing while button is high
+    }
+    
+    beep (1);
+    aCore_Sleep (1000); // debounce
+    for (i = 0; i != 100; i++)
+    {
+        if (aCore_Inporti (DIG_BUTTON_IO) == 0)
+        {
+            g_mode++;
+            beep (1);
+            aCore_Sleep (1000); // debounce
+        }
+        aCore_Sleep (100);
+        if (g_mode == 2)
+        {
+            break;
+        }
+    }
+
+    // apply bounds to mode and confirm user selection
+    beep (1 + g_mode);
+
+    // set internal HB
+    // so light blinks while robot is rolling around
+    aCore_Outportc(aPortHBMode, 1);
+    aCore_Sleep (5000);
+}
+
+
+
+void timedScoot(int vL, int vR, int t)
+{
+    moEnableWheels(X_ENA);
+    moGo(vL, vR);
+    aCore_Sleep(t);
+    moGo(0, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////
+// ZUG is a wall-hugging routine
+// sonar checks for obstacles directly in front of the robot
+//
+// right ->   zug(V_HUG1, 1, A2D_RNG_R_RD);
+// left ->    zug(V_HUG1, -1, A2D_RNG_L_RD);
+
+void zug(int v)
+{
+    moEnableWheels(X_ENA);
+  
+    // hug until user presses button and it goes low (0)  
+    while (aCore_Inporti (DIG_BUTTON_IO))
+    {
+        // always reconfigure pin before taking sonar reading
+        // (this is a workaround for old BrainStem GP 1.0 Build 3)
+        aCore_Outportc (DIG_EZ1_PW_CFG, DIG_CODE_HIGH_TMR);
+        
+        // get a sonar reading and see if front obstacle is too close
+        if (islt (aCore_Inporti (DIG_EZ1_PW_PTIME), THR_RS_OBSTACLE))
+        {
+            // if way too close
+            // do a rotate away from object (direction based on hug side)
+            moGo (g_sign * (-v), g_sign * (v));
+            aCore_Sleep(1000);
+        }
+        else
+        {
+            // no front obstacle and nothing else going on
+            // so just do a hug iteration based on side range finder reading
+            moGoSteer((THR_HUG - aCore_Inporti (g_rPort)) * g_sign, v);
+        }
+    }
+    
+    // hug is done so stop motor
+    moGo(0, 0); 
+}
+
+
+
+void one_hug_and_stop ()
+{
+    // hug wall
+    zug(V_HUG1);
+
+    // user interrupted hug so make rude noise
+    fart ();
+
+    // wait for use to press button again
+    while (aCore_Inporti (DIG_BUTTON_IO) == 1)
+    {
+        // do nothing while button is high
+    }
+
+    beep(2);
+    aCore_Sleep (5000);
+}
+
+
+
+void main()
+{
+    init();
+
+    // apply option follow left wall instead of default right wall
+    if (g_mode == 1)
+    {
+        g_sign = -1;
+        g_rPort = A2D_RNG_L_RD;
+    }
+    
+    while (1)
+    {
+        one_hug_and_stop ();
+        if (g_mode == 2)
+        {
+            g_sign = -g_sign; // toggle sign for rotation during hug
+            g_rPort = g_rPort ^ 2; // trick to toggle port for range sensor
+            
+            // rotate in place to point back in opposite direction
+            moGo (g_sign * (V_HUG1), g_sign * (-V_HUG1));
+            aCore_Sleep(12500);
+        }
+    }
+}
