@@ -1,0 +1,189 @@
+#include <aCore.tea>
+#include <aPad.tea>
+#include <aDig.tea>
+#include <aServo.tea>
+#include <aPrint.tea>
+#include <aMulti.tea>
+
+#include "bx.tea"
+
+
+// file slot 0 does not seem to work anymore
+
+
+#define K_FUDGE 108
+
+
+// these MUST be first
+int idk1 = 0;
+int idk4 = 0;
+int iakx5 = 0;
+int iak2 = 0;
+int iak3 = 0;
+
+// these come next
+int VEL = 20;
+int kv = 1;
+int keyPrev = 0;
+
+
+
+void getRCInput()
+{
+  asm
+  {
+    // read all remote control inputs
+    pushms	aPortDigital+aPortDigitalBlockSize*0+aOffsetDigitalIO
+    popssa 0
+    pushms	aPortDigital+aPortDigitalBlockSize*1+aOffsetDigitalIO
+    popssa 2
+    pushms	aPortA2D+aPortA2DBlockSize*0+aOffsetAnalogRead
+    popssa 4
+    pushms	aPortA2D+aPortA2DBlockSize*3+aOffsetAnalogRead
+    popssa 6
+    pushms	aPortA2D+aPortA2DBlockSize*4+aOffsetAnalogRead
+    popssa 8
+  }
+}
+
+int getRCKey()
+{
+   int k = 0;
+   int result = 0;
+
+   getRCInput();
+   k = (idk1 * KA_1) +
+       ((iak2 >> 9) * KA_2) +
+       ((iak3 >> 9) * KA_3) +
+       (idk4 * KA_4) +
+       (iakx5 / K_FUDGE);
+
+   if (k != keyPrev)
+   {
+      result = k;
+   }
+   keyPrev = k;
+
+   return result;
+}
+
+
+
+void buzz(int n, int t)
+{
+   while (n)
+   {
+      aDig_Write(DIG_BEEP, 1);
+      aCore_Sleep(20);
+      aDig_Write(DIG_BEEP, 0);
+      aCore_Sleep(t);
+      n--;
+   }
+}
+
+void tone(int n, int t)
+{
+   while (n)
+   {
+      aDig_Write(DIG_BEEP, 1);
+      aCore_Sleep(t);
+      aDig_Write(DIG_BEEP, 0);
+      aCore_Sleep(t);
+      n--;
+   }
+}
+
+void beeps(int t, int p)
+{
+   tone(t, 1);
+   aCore_Sleep(p);
+   tone(t, 1);
+}
+
+void fart()
+{
+   buzz(16,200);
+   buzz(12,400);
+   buzz(8,600);
+   buzz(4,800);
+   buzz(2,1000); 
+}
+
+void rah()
+{
+   tone(30,20);
+   tone(20,30);
+   tone(10,60);
+   tone(5,120);
+   tone(2,200);
+}
+
+
+
+void changeDir(int vL, int vR)
+{
+   // request stop of the current motion
+   aPad_WriteChar(PAD_C_GO, 0);
+
+   // wait for status from leg server
+   while (aPad_ReadChar(PAD_C_MOVING))
+   {
+      aCore_Sleep(100);
+   }
+
+   // change direction and go
+   aPad_WriteInt(PAD_I_V_L, vL);
+   aPad_WriteInt(PAD_I_V_R, vR);
+   aPad_WriteChar(PAD_C_GO, 1);
+}
+
+
+
+void decode(int k)
+{
+   switch(k)
+   {
+       case KA_F:  changeDir(VEL, VEL);  break;
+       case KA_B:  changeDir(-VEL, -VEL); break;
+       case KA_R:  changeDir(VEL, -VEL); break;
+       case KA_L:  changeDir(-VEL, VEL); break;
+       case KA_0:  aPad_WriteChar(PAD_C_GO, 0); break;
+       case KA_1:  beeps(30, 160); break;
+       case KA_2:  fart(); break;
+       case KA_3:  rah(); break;
+       case KA_4:
+       {
+          kv++;
+          if (kv == 2) kv = 0;
+          VEL = 14 + (kv * 8);
+          tone(20 + kv * 30, 1);
+       }
+       default: break;
+   }
+}
+
+
+
+void main()
+{
+   int k = 0;
+
+   aDig_Config(DIG_BEEP, ADIG_OUTPUT);
+   aDig_Config(DIG_FB_L, ADIG_INPUT);
+   aDig_Config(DIG_FB_R, ADIG_INPUT);
+
+   beeps(40, 200);
+
+   aMulti_Spawn(9, 1);  // start leg thread
+
+   while (1)
+   {
+      k = getRCKey();
+      if (k)
+      {
+//         aPrint_IntDec(k);
+//         aPrint_String("\n");
+         decode(k);
+      }
+   }
+}

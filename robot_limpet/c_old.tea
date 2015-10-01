@@ -1,0 +1,64 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aA2D.tea>
+#include <aDig.tea>
+#include <aPad.tea>
+
+#include "bx.tea"
+
+
+
+void main(char callingProcID)
+{
+   int i;
+   int k = 0;
+   int kPrev = 0;
+
+   while (1)
+   {
+      k = 0;
+      i = aA2D_ReadInt(A2D_KX5);
+      
+      // do a "lookdown" based on negative subtraction result
+      if ((KA_R - i) & SIGN_BIT)
+      {
+         k = KA_R;
+      }
+      else if ((KA_L - i) & SIGN_BIT)
+      {
+         k = KA_L;
+      }
+      else if ((KA_B - i) & SIGN_BIT)
+      {
+         k = KA_B;
+      }
+      else if ((KA_F - i) & SIGN_BIT)
+      {
+         k = KA_F;
+      }
+      else if ((KA_0 - i) & SIGN_BIT)
+      {
+         k = KA_0;
+      }
+      else if (aDig_ReadInt(DIG_K1))
+      {
+         k = KA_1;
+      }
+      else if ((512 - aA2D_ReadInt(A2D_K2)) & SIGN_BIT)
+      {
+         k = KA_2;
+      }
+      else if ((512 - aA2D_ReadInt(A2D_K3)) & SIGN_BIT)
+      {
+         k = KA_3;
+      }
+
+      if (k != kPrev)
+      {
+         aPad_WriteInt(PAD_I_KEY, k);
+      }
+      
+      // store previous for comparison
+      kPrev = k;
+   }
+}

@@ -1,0 +1,107 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aA2D.tea>
+#include <aDig.tea>
+#include <aDump.tea>
+#include <aServo.tea>
+
+#define SRV_MO_L        0
+#define SRV_MO_R        1
+
+#define SIGN_BIT        0x8000
+
+#define ENA_L   (unsigned char)(SRV_ENA)
+#define ENA_R   (unsigned char)(SRV_ENA | SRV_INV)
+
+
+
+void moGo(int vL, int vR)
+{
+   aServo_SetAbsolute(SRV_MO_L, (unsigned char)(vL + 128));
+   aServo_SetAbsolute(SRV_MO_R, (unsigned char)(vR + 128));
+}
+
+void moOn()
+{
+   aServo_SetConfig(SRV_MO_L, ENA_L);
+   aServo_SetConfig(SRV_MO_R, ENA_R);
+}
+
+void moOff()
+{
+   aServo_SetConfig(SRV_MO_L, 0);
+   aServo_SetConfig(SRV_MO_R, 0);
+}
+
+void steer(int err, int maxv)
+{
+	int vr = maxv;
+	int vl = maxv;
+	int ferr = err;
+	
+	// take abs of err and limit it to maxv
+	if (err & SIGN_BIT) ferr = -err;
+	if (ferr > maxv) ferr = maxv;
+	
+	// robot is steered by slowing one wheel
+	// check sign of err to see which wheel gets slowed
+	if ((err & SIGN_BIT) == 0)
+	{
+		vr = maxv - ferr;
+	}
+	else
+	{
+		vl = maxv - ferr;
+	}
+	
+	// apply new speeds
+	moGo(vl, vr);
+}
+
+
+
+int measure()
+{
+int x1 = 0;
+int x2 = 0;
+aDig_Write(4, 1);
+aCore_Sleep(100);
+x1=aA2D_ReadInt(0);
+aDig_Write(4, 0);
+aCore_Sleep(100);
+x2=aA2D_ReadInt(0);
+return x2-x1;
+}
+
+
+
+void main()
+{
+   int i;
+   int k = 0;
+   int avg = 0;
+   int err = 0;
+   int kmax = 0;
+   int kmin = 10000;
+
+   aCore_Sleep(10000);
+   aDig_Config(4, ADIG_OUTPUT);
+
+   moOn();
+   steer(0, 10);
+
+   while (1)
+   {
+      k = measure();
+      err = (measure() - 114) / 4;
+      steer(-err, 20);
+
+
+/*
+aPrint_IntDec(err);
+aPrint_String("\n");
+      aCore_Sleep(2000);
+*/
+
+   }
+}

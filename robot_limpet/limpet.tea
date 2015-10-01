@@ -1,0 +1,118 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aServo.tea>
+#include <aDig.tea>
+#include <aPad.tea>
+#include <aReflex.tea>
+
+#define SERVO_LEG_L 0
+#define SERVO_LEG_R 1
+
+#define X_CFG_LEG_L 0x81
+#define X_CFG_LEG_R 0xC1
+
+#define DIG_LEG_L 3
+#define DIG_LEG_R 4
+
+#define PAD_EDGE_L  32
+#define PAD_EDGE_R  34
+#define PAD_TIME_L  36
+#define PAD_TIME_R  38
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+
+void moGo(int vL, int vR)
+{
+    aServo_SetAbsolute(SERVO_LEG_L, (unsigned char)(vL + 128));
+    aServo_SetAbsolute(SERVO_LEG_R, (unsigned char)(vR + 128));
+}
+
+void moEnableLegs(unsigned char mask)
+{
+    moGo(0, 0);
+    aServo_SetConfig(SERVO_LEG_L, (unsigned char)(X_CFG_LEG_L & mask));
+    aServo_SetConfig(SERVO_LEG_R, (unsigned char)(X_CFG_LEG_R & mask));
+}
+
+
+
+void walkStraight(int vL, int vR)
+{
+    int halfTimeR = 650;
+    int halfTimeL = 650;
+    
+    moGo(vL, vR);
+
+    while (1)
+    {
+        if (aPad_ReadInt(PAD_EDGE_L))
+        {
+            halfTimeL = aPad_ReadInt(PAD_TIME_L) / 2;
+            aPad_WriteInt(PAD_EDGE_L, 0); // reset edge L
+            aPad_WriteInt(PAD_TIME_L, 0); // reset time L
+            if (aPad_ReadInt(PAD_TIME_R) < halfTimeR)
+            {
+                moGo(0, vR);
+            }
+            else
+            {
+                moGo(vL, 0);
+            }
+        }
+
+        if (aPad_ReadInt(PAD_EDGE_R))
+        {
+            halfTimeR = aPad_ReadInt(PAD_TIME_R) / 2;
+            aPad_WriteInt(PAD_EDGE_R, 0); // reset edge R
+            aPad_WriteInt(PAD_TIME_R, 0); // reset time R
+            if (aPad_ReadInt(PAD_TIME_L) < halfTimeL)
+            {
+                moGo(vL, 0);
+            }
+            else
+            {
+                moGo(0, vR);
+            }
+        }
+
+
+        if (aPad_ReadInt(PAD_TIME_R) > halfTimeR)
+        {
+            moGo(vL, vR);
+        }
+
+        if (aPad_ReadInt(PAD_TIME_L) > halfTimeL)
+        {
+            moGo(vL, vR);
+        }
+    }
+}
+
+
+
+void main()
+{
+    int x = 0;
+        
+    // leg feedback digital I/O
+    // enable polling for 1-to-0 transition
+    // companion reflex will increment counter and reset polling
+    aDig_Config(DIG_LEG_L, ADIG_INPUT | ADIG_POLLENA);
+    aDig_Config(DIG_LEG_R, ADIG_INPUT | ADIG_POLLENA);
+    
+    // courtesy delay
+    aCore_Sleep(30000);
+    aPrint_String("ready\n");
+    aCore_Sleep(20000);
+
+    // enable legs and prime our timer reflexes
+    moEnableLegs((unsigned char)0xFF);
+    aReflex_TriggerChar(39, 0);
+    aReflex_TriggerChar(40, 0);
+
+    
+    walkStraight(15, 15);
+    moGo(0, 0);
+}

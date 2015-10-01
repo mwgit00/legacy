@@ -1,0 +1,124 @@
+
+#include <aCore.tea>
+#include <aPad.tea>
+#include <aDig.tea>
+#include <aServo.tea>
+#include <aPrint.tea>
+
+#include "bx.tea"
+
+
+#define ENA_L	(unsigned char)(SRV_ENA)
+#define ENA_R	(unsigned char)(SRV_ENA | SRV_INV)
+
+
+void moGo(int vL, int vR)
+{
+   aServo_SetAbsolute(SRV_MO_L, (unsigned char)(vL + 128));
+   aServo_SetAbsolute(SRV_MO_R, (unsigned char)(vR + 128));
+}
+
+
+void spin()
+{
+   int vL = 0;
+   int vR = 0;
+   int ctL = 0;
+   int ctR = 0;
+   int ctLmax = 0;
+   int ctRmax = 0;
+   int ctLhalf = 0;
+   int ctRhalf = 0;
+
+   char eR1 = 1;
+   char eR2 = 1;
+   char eL1 = 1;
+   char eL2 = 1;
+
+   char isGo = 1;
+
+
+   // start legs turning
+   // loop will get things in sync
+   // will stop when one leg is fully up
+   aServo_SetConfig(SRV_MO_L, ENA_L);
+   aServo_SetConfig(SRV_MO_R, ENA_R);
+
+
+   while (isGo)
+   {
+      ////////////////////////////////////
+      // update shaft position max pt
+      // so halfway pt can be calculated
+      
+      if ((ctLmax - ctL) & SIGN_BIT) ctLmax = ctL;
+      if ((ctRmax - ctR) & SIGN_BIT) ctRmax = ctR;
+      ctLhalf = ctLmax >> 1;
+      ctRhalf = ctRmax >> 1;
+
+     
+      /////////////////////////////////////////////////////////
+      // if L hits FB pt before R hits halfway pt then stop L
+      // but let L go again if R hits halfway pt
+
+      eL1 = aDig_ReadChar(DIG_FB_L);
+      if (!eL1 && eL2)
+      {
+	 isGo = aPad_ReadChar(PAD_C_GO);
+         ctL = 0;
+         if ((ctR - ctRhalf) & SIGN_BIT) aServo_SetConfig(SRV_MO_L, 0);
+      }
+      eL2 = eL1;
+      
+      if ((ctRhalf - ctR) & SIGN_BIT) aServo_SetConfig(SRV_MO_L, ENA_L);
+
+      
+      /////////////////////////////////////////////////////////
+      // if R hits FB pt before L hits halfway pt then stop R
+      // but let R go again if L hits halfway pt
+
+      eR1 = aDig_ReadChar(DIG_FB_R);
+      if (!eR1 && eR2)
+      {
+	 isGo = aPad_ReadChar(PAD_C_GO);
+         ctR = 0;
+         if ((ctL - ctLhalf) & SIGN_BIT) aServo_SetConfig(SRV_MO_R, 0);
+      }
+      eR2 = eR1;
+
+      if ((ctLhalf - ctL) & SIGN_BIT) aServo_SetConfig(SRV_MO_R, ENA_R);
+      
+
+      ////////////////////////////////////////
+      // update counter for each shaft
+      // it's proportional to shaft position
+      
+      ctL++;
+      ctR++;
+   }
+   
+   // stop turning
+   aServo_SetConfig(SRV_MO_L, 0);
+   aServo_SetConfig(SRV_MO_R, 0);
+}
+
+
+
+void main(char callingProcID)
+{
+   while (1)
+   {
+      aCore_Sleep(100);
+      if (aPad_ReadChar(PAD_C_GO))
+      {
+         // inform client that we are moving
+         aPad_WriteChar(PAD_C_MOVING, 1);
+
+         moGo(aPad_ReadInt(PAD_I_V_L), aPad_ReadInt(PAD_I_V_R));
+         spin();
+
+         // inform client that we are stopped
+         aPad_WriteChar(PAD_C_MOVING, 0);
+      }
+   }
+}
