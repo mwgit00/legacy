@@ -1,0 +1,403 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aDig.tea>
+#include <aDump.tea>
+#include <aServo.tea>
+
+#define SRV_MO_L        0
+#define SRV_MO_R        1
+
+#define MAX_V		20
+#define	K_P		2
+#define K_D             0
+#define K_I		4
+
+#define SIGN_BIT        0x8000
+
+#define ENA_L   (unsigned char)(SRV_ENA)
+#define ENA_R   (unsigned char)(SRV_ENA | SRV_INV)
+
+
+
+// global absolute addressable buffer
+// for holding serial data from ColorPAL
+//
+// the buffer starts at absolute stack address 0
+//
+unsigned char b00=0;
+unsigned char b01=0;
+unsigned char b02=0;
+unsigned char b03=0;
+unsigned char b04=0;
+unsigned char b05=0;
+unsigned char b06=0;
+unsigned char b07=0;
+unsigned char b08=0;
+unsigned char b09=0;
+unsigned char b10=0;
+unsigned char b11=0;
+unsigned char b12=0;
+
+
+
+// previous error and "integral" error for steering control
+// make it global so it's stashed between iterations
+int prevErr = 0;
+int ierr = 0;
+
+
+
+int kr = 0;
+int kg = 0;
+int kb = 0;
+int ambRG = 0;
+
+
+
+// this is more efficient than compiler's >= routine
+int _GTE(int a, int b)
+{
+   return ((b - a) & SIGN_BIT);
+}
+
+
+
+// this is more efficient than compiler's < routine
+int _LT(int a, int b)
+{
+   return ((a - b) & SIGN_BIT);
+}
+
+
+
+// convert ASCII hex character to integer in range 0-15
+unsigned int hex(unsigned int x)
+{
+   // add offset to convert 'A' - 'F' based on ASCII bit test
+   if ((x & 0x70) == 4)
+   {
+      x = x - 7;
+   }
+
+   // final subtraction yields value in range 0 - 15
+   return x - 48;
+}
+
+
+
+// convert three ASCII hex digits to one decimal integer
+unsigned int conv3(unsigned char a, unsigned char b, unsigned char c)
+{
+   return ((hex(a) * 256) + (hex(b) * 16) + hex(c));
+}
+
+
+
+// this toggles a piezo buzzer to generate sounds
+void buzz(int n, int t1, int t2)
+{
+   asm
+   {
+BUZZ_1:
+      pushlb 1      // on
+      popbm 0x0501
+      pushss 6      // delay by t1
+      popsm 0x0000
+      pushlb 0      // off
+      popbm 0x0501
+      pushss 4      // delay by t2
+      popsm 0x0000
+      decs 8        // decrement n, start over if not 0
+      brnz BUZZ_1
+   }
+}
+
+
+
+// apply velocities to left and right servo motors
+void moGo(int vL, int vR)
+{
+   asm
+   {
+      pushss 6      // vR
+      pushls 128
+      adds          // +128
+      popsm 0x0402  // abs L
+
+      pushss 4      // vel R
+      pushls 128
+      adds          // +128
+      popsm 0x040A  // abs R
+   }
+}
+
+
+
+// enable servo motor outputs
+void moOn()
+{
+   asm
+   {
+      pushlb ENA_L
+      popbm 0x0400  // CFG L
+      pushlb ENA_R
+      popbm 0x0408  // CFG R
+   }
+}
+
+
+
+// disable servo motor outputs
+// this prevents chatter and creep when robot is still
+void moOff()
+{
+   asm
+   {
+      pushlb 0
+      popbm 0x0400  // CFG L
+      pushlb 0
+      popbm 0x0408  // CFG R
+   }
+}
+
+
+
+// use an error term to turn the robot
+// a larger error makes harder turn
+// the sign of the error determines direction of turn
+void steer(int err, int maxv)
+{
+   int ferr = err;
+	
+   // take abs of err
+   if (err & SIGN_BIT)
+   {
+      ferr = -err;
+   }
+
+   // rail abs value of err to maxv
+   if (_GTE(ferr, maxv))
+   {
+      ferr = maxv;
+   }
+	
+   // robot is steered by slowing one wheel based on error
+   // check sign of err to see which wheel gets slowed
+   // ferr is railed to maxv so slowed wheel vel will be in range 0-maxv
+   if (err & SIGN_BIT)
+   {
+      moGo(maxv - ferr, maxv);
+   }
+   else
+   {
+      moGo(maxv, maxv - ferr);
+   }
+}
+
+
+
+// read the ColorPAL sensor
+// requests one RGB sample and stores hex response in global buffer
+void sample()
+{
+  asm
+  {
+    // send command to get RGB sample
+    pushls 0x3D6D // push bytes "=m!" 3
+    pushls 0x2103
+    popbm aPortSerialNTX
+
+    // wait for 3-byte echo and 9-byte raw input reply
+    // RRRGGGBBB (hex digits)
+
+    pushlb 12
+    popbm aPortSerialNRX
+
+    // discard size of read (1 byte)
+    popb
+
+    // put 3-byte echo and 9-byte response into global buffer
+    popssa 10
+    popssa 8
+    popssa 6
+    popssa 4
+    popssa 2
+    popssa 0
+  }
+}
+
+
+
+// follow red-green edge on surface
+void follow(int kr, int kg, int avg, int dir)
+{
+   // this routine attempts to steer the robot
+   // so it keeps red and green components balanced
+   // this makes the robot follow a red-green edge
+
+   // error between red and green gets bigger
+   // as distance between sensor and surface decreases
+   // so first scale up red-green error then normalize to ambient red-green intensity
+   // scaling up first prevents integer division from zeroing the result
+   int err = ((kr - kg) * 10) / avg;
+
+   // check for a sign change in the error
+   // a sign change in the error means we're on the border
+   // otherwise accumulate error which will gradually make robot turn more sharply
+   if ((err ^ prevErr) & SIGN_BIT)
+   {
+      ierr = 0;
+   }
+   else
+   {
+      ierr = ierr + err;
+   }
+
+   // stash previous error
+   // use in next iteration to detect sign change
+   prevErr = err;
+
+
+   // finally apply gains and direction factor
+   // dir is 1 for red-on-left
+   // dir is -1 for red-on-right
+   steer(((err * K_P) + (ierr / K_I)) * dir, MAX_V);
+}
+
+
+
+
+void checkColor()
+{
+   sample();
+
+   // slurp individual red-green-blue values out of buffer
+   kr = conv3(b03, b04, b05);
+   kg = conv3(b06, b07, b08);
+   kb = conv3(b09, b10, b11);
+
+   // get measure of ambient red-green
+   ambRG = (kr + kg);
+
+   // occasionally the module may return 0s
+   // so this will prevent a divide-by-zero error later...
+   if (!ambRG)
+   {
+      ambRG = 1;
+   }
+}
+
+
+
+void spinAwayFromBlue()
+{
+   int blueCt = 3;
+
+   moGo(-MAX_V, MAX_V);
+   while(blueCt)
+   {
+      checkColor();
+
+      // raise blue threshold by 33% to provide some hysteresis
+      if (_LT(((kb * 4) / 3), ambRG))
+      {
+         blueCt--;
+      }
+      else
+      {
+         blueCt = 3;
+      }
+   }
+}
+
+
+
+void main()
+{
+   int blueCt = 0;
+   int dir = 1;
+
+   // be sure motors are off
+   moOff();
+   
+   // configure buzzer output
+   asm
+   {
+      pushlb 0
+      popbm 0x0500
+   }
+
+   // courtesy delay to give user time to put robot down
+   buzz(40,18,18);
+   aCore_Sleep(10000);
+   buzz(40,14,14);
+   aCore_Sleep(10000);
+   buzz(40,12,12);
+   aCore_Sleep(10000);
+   buzz(40,10,10);
+   aCore_Sleep(10000);
+
+   // now the motors can be turned on
+   moOn();
+
+   while (1)
+   {
+      checkColor();
+
+      // blue component is greater than sum of red and green
+      // halt and make decision if strong blue detected
+      if (_GTE(kb, ambRG))
+      {
+         moGo(MAX_V, MAX_V);
+         blueCt++;
+         if (blueCt == 3)
+         {
+            // TODO
+            // - maybe scoot forward a little bit and check color again
+            // - then if not blue anymore just stop and wait
+            
+            moOn();
+            aCore_Sleep(2000);
+            moOff();
+
+            aCore_Sleep(30000);
+            moOn();
+
+            if (1)
+            {
+               spinAwayFromBlue();
+               dir = -dir;
+            }
+
+            // reset blue counter
+            blueCt = 0;
+         }
+      }
+      else
+      {
+         blueCt = 0;
+      }
+
+      // back to following red-green edge
+      follow(kr, kg, ambRG, dir);
+
+     // here are some debug statements that come in handy
+
+/*
+aPrint_IntDec(kr);
+aPrint_Char(',');
+aPrint_IntDec(kg);
+aPrint_Char(',');
+aPrint_IntDec(ambRG);
+aPrint_Char(',');
+aPrint_IntDec(((kr - kg) * 10) / ambRG);
+aPrint_Char(',');
+aPrint_IntDec(kb);
+aPrint_Char(',');
+aPrint_IntDec(blueCt);
+aPrint_String(".\n");
+      aCore_Sleep(2000);
+*/
+
+   }
+}

@@ -1,0 +1,153 @@
+#include <aCore.tea>
+#include <aPad.tea>
+#include <aDig.tea>
+#include <aServo.tea>
+#include <aPrint.tea>
+#include <aMulti.tea>
+
+#include "bx.tea"
+
+#define VEL 20
+
+
+
+// file slot 0 does not seem to work anymore
+
+
+
+void buzz(int n, int t)
+{
+   while (n)
+   {
+      aDig_Write(DIG_BEEP, 1);
+      aCore_Sleep(20);
+      aDig_Write(DIG_BEEP, 0);
+      aCore_Sleep(t);
+      n--;
+   }
+}
+
+void tone(int n, int t)
+{
+   while (n)
+   {
+      aDig_Write(DIG_BEEP, 1);
+      aCore_Sleep(t);
+      aDig_Write(DIG_BEEP, 0);
+      aCore_Sleep(t);
+      n--;
+   }
+}
+
+void sound(int k, int n, int dn, int t, int dt)
+{
+   while (k)
+   {
+       tone(n, t);
+       n = n + dn;
+       t = t + dt;
+       k--;
+   }
+}
+
+
+void fart()
+{
+   buzz(16,200);
+   buzz(12,400);
+   buzz(8,600);
+   buzz(4,800);
+   buzz(2,1000); 
+}
+
+void haha()
+{
+   tone(40,20);
+   tone(60,40);
+}
+
+void zap()
+{
+   sound(5, 5, 5, 18, -4);
+   sound(5, 25, -5, 2, 4);
+}
+
+
+
+void changeDir(int vL, int vR)
+{
+   // request stop of the current motion
+   aPad_WriteChar(PAD_C_GO, 0);
+
+   // wait for status from leg server
+   while (aPad_ReadChar(PAD_C_MOVING))
+   {
+      aCore_Sleep(100);
+   }
+
+   // change direction and go
+   aPad_WriteInt(PAD_I_V_L, vL);
+   aPad_WriteInt(PAD_I_V_R, vR);
+   aPad_WriteChar(PAD_C_GO, 1);
+}
+
+
+
+void decode(int k)
+{
+   switch(k)
+   {
+       case KA_F:  changeDir(VEL, VEL);  break;
+       case KA_B:  changeDir(-VEL, -VEL); break;
+       case KA_R:  changeDir(VEL, -VEL); break;
+       case KA_L:  changeDir(-VEL, VEL); break;
+       case KA_F:  aPad_WriteChar(PAD_C_GO, 0); break;
+       case KA_1:  zap(); break;
+       case KA_2:  fart(); break;
+       case KA_3:  haha(); break;
+   }
+}
+
+
+
+void main()
+{
+   int i = 0;
+   int k = 0;
+
+   aDig_Config(DIG_BEEP, ADIG_OUTPUT);
+   aDig_Config(DIG_FB_L, ADIG_INPUT);
+   aDig_Config(DIG_FB_R, ADIG_INPUT);
+
+   tone(40, 1);
+   aCore_Sleep(400);
+   tone(40, 1);
+
+/*
+   aCore_Sleep(30000);
+fart();
+   aCore_Sleep(30000);
+haha();
+   aCore_Sleep(30000);
+
+   aCore_Sleep(30000);
+
+sound(5, 25, -5, 2, 40);
+   aCore_Sleep(30000);
+*/
+
+   aMulti_Spawn(9, 1);  // legs
+   aMulti_Spawn(8, 2);  // IR rx
+
+   while (1)
+   {
+      k = aPad_ReadInt(PAD_I_KEY);
+      if (k)
+      {
+         aPad_WriteInt(PAD_I_KEY, 0);
+         aPrint_IntDec(k);
+         aPrint_String("\n");
+         decode(k);
+      }
+   }
+}

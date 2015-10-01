@@ -1,0 +1,81 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aA2D.tea>
+#include <aDig.tea>
+#include <aPad.tea>
+
+#include "bx.tea"
+
+#define K_FUDGE 108
+
+int idk1 = 0;
+int idk4 = 0;
+int iakx5 = 0;
+int iak2 = 0;
+int iak3 = 0;
+
+
+void gulp()
+{
+  asm
+  {
+    // read all inputs
+    pushms	aPortDigital+aPortDigitalBlockSize*0+aOffsetDigitalIO
+    popssa 0
+    pushms	aPortDigital+aPortDigitalBlockSize*1+aOffsetDigitalIO
+    popssa 2
+    pushms	aPortA2D+aPortA2DBlockSize*0+aOffsetAnalogRead
+    popssa 4
+    pushms	aPortA2D+aPortA2DBlockSize*3+aOffsetAnalogRead
+    popssa 6
+    pushms	aPortA2D+aPortA2DBlockSize*4+aOffsetAnalogRead
+    popssa 8
+  }
+}
+
+void main()
+{
+   int i;
+   int k = 0;
+   int r = 0;
+   int kPrev = 0;
+
+int e3;
+int e4;
+
+   while (1)
+   {
+      k = 0;
+
+      gulp();
+
+      e3 = aDig_ReadChar(3);
+      e4 = aDig_ReadChar(4);
+
+      r = iakx5 / K_FUDGE;
+      k = (idk1 * KA_1) +
+          ((iak2 >> 9) * KA_2) +
+          ((iak3 >> 9) * KA_3) +
+          (idk4 * KA_4) +
+          r;
+
+      if (k != kPrev)
+      {
+//         aPad_WriteInt(PAD_I_KEY, k);
+aPrint_IntDec(iakx5 - (r*K_FUDGE));
+aPrint_String(",");
+aPrint_IntDec(k);
+aPrint_String("\n");
+      }
+
+
+aPrint_IntDec(e3);
+aPrint_String(",");
+aPrint_IntDec(e4);
+aPrint_String("\n");
+aCore_Sleep(5000);
+      
+      // store previous for comparison
+      kPrev = k;
+   }
+}

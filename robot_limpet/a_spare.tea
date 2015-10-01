@@ -1,0 +1,66 @@
+
+#include <aCore.tea>
+#include <aPad.tea>
+#include <aDig.tea>
+#include <aServo.tea>
+#include <aPrint.tea>
+#include <aMulti.tea>
+
+#include "bx.tea"
+
+#define VEL 20
+
+// file slot 0 does not seem to work anymore
+
+void delay(int k)
+{
+   int i;
+   for (i = 0; i != k; i++)
+   {
+      aCore_Sleep(10000);
+   }
+}
+
+void main()
+{
+   int i;
+
+   aDig_Config(DIG_FB_L, ADIG_INPUT);
+   aDig_Config(DIG_FB_R, ADIG_INPUT);
+
+   aCore_Sleep(30000);
+   aMulti_Spawn(1, 1);
+   aMulti_Spawn(2, 2);
+
+   aPad_WriteInt(PAD_I_V_L, VEL);
+   aPad_WriteInt(PAD_I_V_R, VEL);
+   aPad_WriteChar(PAD_C_GO, 1);
+//         moGo(-15, VEL); // ccw
+//	 moGo(15, -VEL); // cw
+   
+   delay(10);
+   aPad_WriteChar(PAD_C_GO, 0);
+   delay(3);
+
+
+   aPad_WriteInt(PAD_I_V_L, -VEL);
+   aPad_WriteInt(PAD_I_V_R, VEL);
+   aPad_WriteChar(PAD_C_GO, 1);
+   delay(10);
+   aPad_WriteChar(PAD_C_GO, 0);
+   delay(3);
+
+   aPad_WriteInt(PAD_I_V_L, VEL);
+   aPad_WriteInt(PAD_I_V_R, -VEL);
+   aPad_WriteChar(PAD_C_GO, 1);
+   delay(10);
+   aPad_WriteChar(PAD_C_GO, 0);
+   delay(3);
+
+   aPad_WriteInt(PAD_I_V_L, -VEL);
+   aPad_WriteInt(PAD_I_V_R, -VEL);
+   aPad_WriteChar(PAD_C_GO, 1);
+   delay(10);
+   aPad_WriteChar(PAD_C_GO, 0);
+   delay(3);
+}
