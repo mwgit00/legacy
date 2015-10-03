@@ -1,5 +1,4 @@
 # legacy
-Legacy code from a variety of projects.
 
 Over the last 20 years or so, I've built a variety of clocks, robots, and other gizmos with several different microcontroller brains.  Some of these creations are still functional and may need occasional rework or updates.  Others were cannibalized and no longer exist.  If I find old code for one of my projects, I will try to put it here.
 
