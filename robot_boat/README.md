@@ -1,7 +1,5 @@
 # GPS Boat
 
-This was an autonomous boat that used a compass and GPS for guidance.  It was slow, but once I had everything tuned, it was very reliable.  Every 10 seconds or so, it would use GPS readings to check if it was still heading towards its next waypoint.  Between readings, a compass loop kept it on the previous heading.
+This was an autonomous boat that used a compass and GPS for guidance.  I programmed it to follow a diamond-shaped path around a small lake.  It was slow, but once I had everything tuned, it was very reliable.  Every 10 seconds or so, it would use GPS readings to check if it was still heading towards its next waypoint.  Between readings, a compass loop kept it on the previous heading.
 
-![alt text](https://github.com/mwgit00/legacy/robot_boat/boat2.jpg "Boat")
-
-
+![Boat](https://github.com/mwgit00/legacy/blob/master/robot_boat/boat2.jpg "Boat")
