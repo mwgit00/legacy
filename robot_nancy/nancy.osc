@@ -1,0 +1,654 @@
+' Robo02 Nancy
+' Acroname Spokesmodel Robot
+' Trinity 2002 Fire-Fighting Robot
+'
+' Sensor geometry changed from 2001:
+' - Side-look IR switched to front-look
+' - Candle-spotter nearer to center
+' - UVTron off to side
+
+
+const mmin=47			' 47 min
+const mmin2=48
+const mmin1=49
+const mctr=50
+const mmax1=51
+const mmax2=52
+const mmax=53			' 55 max
+
+const wh2ouch=110			' 105,100,80 late wall hug
+const wh2bad=105			' 75,70,50 early wall hug
+const wh2ok=85
+
+'const candlethr=70
+'const reacqthr=75			' 32,48?
+
+dim ii as new oWord		' utility variable
+dim jj as new oWord		' utility variable
+dim wclock as new oCounter
+
+dim rmotor as new oServo	' 70 fw, 51 stall, 30 bw
+dim lmotor as new oServo	' 30 fw, 50 stall, 70 bw
+
+dim gp12w as new oA2D		' wall-hug
+dim gp12v as new oA2D		' velocity sensor
+dim gp12x as new oA2D		' front-look
+dim fthr as new oByte		' front-look threshold
+
+dim vel0 as new oByte		' velocity check variables
+dim vel1 as new oByte
+dim veld as new oByte
+
+dim pp as new oPwm		' sound
+
+dim fan as new oDio1		' fan control
+
+dim seek as new oA2D		' candle spotter
+dim cthr as new oByte		' candle threshold
+dim seekchk as new oMath
+dim seekgate as new oGate
+dim cfound as new oByte
+dim cEvent as new oEvent
+
+dim uvIn as new oDio1		' lots of UV stuff
+dim uvPEvent as new oEvent
+dim uvTEvent as new oEvent
+dim uvGate1 as new oGAte
+dim uvGate2 as new oGAte
+dim uvCt as new oByte
+dim uvCtx as new oByte
+
+
+
+sub main()
+    
+	oopic.node=2        ' debug support
+
+	call init
+	call tune            ' acknowledge power-up
+	call tonestart        ' wait for beep
+'	oopic.delay=300        ' or start after delay
+
+
+'	call testspotter
+'	call testadapt
+'	call testuv
+'	call testmotors
+'	call foundcandle
+'	call extinguish
+
+
+
+	fthr=80			' hug first hallway (75)
+	call rwhug1			' stop in front of wall
+
+	call mrotatel		' turn left 90 degrees
+	oopic.delay=50
+	call mstop
+
+	fthr=23			' hug second hallway (23)
+	call rwhug1			' stop in front of first doorway
+
+	call mrotatel		' turn left 90 degrees
+	oopic.delay=50
+	call mstop
+
+	call mforward
+	oopic.delay=50
+	call mstop
+
+	for ii=1 to 40
+		if (uvCt>=2) then
+			call tune
+			while (gp12w<=50)
+				call mforward
+			wend
+			call mstop
+			call foundcandle
+		end if
+		call tone(ii+40,5)
+		oopic.delay=5
+	next ii
+
+	call mbackup
+	oopic.delay=50
+	call mstop
+
+	call mrturnl
+	oopic.delay=110
+	call mstop
+
+	fthr=80
+	call rwhug2            ' hug through rest of house
+
+end sub
+
+
+
+
+
+sub init()
+
+    gp12w.ioline=4
+    gp12w.operate=cvtrue
+
+    gp12v.ioline=3
+    gp12v.operate=cvtrue
+
+    gp12x.ioline=2
+    gp12x.operate=cvtrue
+
+    fan.ioline=5
+    fan.direction=cvOutput
+    fan=0
+
+    wclock.mode=cvCount
+    wclock.direction=cvPositive
+    wclock.tick=0
+    wclock.clockin1.link(oopic.hz60)
+    wclock.output.link(jj.value)
+    wclock.operate=cvTrue
+
+    call inituv
+    call initctrack
+    call initmotors
+    call initsound
+
+end sub
+
+
+
+
+
+'------------------------------------------------------
+' MOTOR CONTROL SUBROUTINES
+'
+sub initmotors()
+    rmotor.IOLine=7
+    rmotor.InvertOut=cvFalse
+    rmotor.Center=2
+    rmotor.Operate=cvFalse
+    lmotor.IOLine=6
+    lmotor.InvertOut=cvTrue
+    lmotor.Center=8            ' tried 7
+    lmotor.Operate=cvFalse
+end sub
+
+sub mstop()
+	rmotor.Operate=cvFalse
+	lmotor.Operate=cvFalse
+	oopic.delay=30		' for more control
+end sub
+
+sub mforward()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmax
+    lmotor=mmax
+end sub
+
+sub mbackup()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmin
+    lmotor=mmin
+end sub
+
+sub mrotater()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmin
+    lmotor=mmax
+end sub
+
+sub mrotater2()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmin2
+    lmotor=mmax2
+end sub
+
+sub mrotater1()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmin1
+    lmotor=mmax1
+end sub
+
+sub mrotatel()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmax
+    lmotor=mmin
+end sub
+
+sub mrotatel2()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmax2
+    lmotor=mmin2
+end sub
+
+sub mrotatel1()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmax2
+    lmotor=mmin2
+end sub
+
+sub mturnr()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mctr
+    lmotor=mmax
+end sub
+
+sub mgturnr()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmax1
+    lmotor=mmax
+end sub
+
+sub mturnl()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmax
+    lmotor=mctr
+end sub
+
+sub mgturnl()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmax
+    lmotor=mmax1
+end sub
+
+sub mrturnr()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mctr
+    lmotor=mmin
+end sub
+
+sub mrturnl()
+    rmotor.Operate=cvTrue
+    lmotor.Operate=cvTrue
+    rmotor=mmin
+    lmotor=mctr
+end sub
+
+sub testmotors()
+    call mforward
+    oopic.delay=200
+    call mbackup
+    oopic.delay=200
+    call mrotatel
+    oopic.delay=200
+    call mrotater
+    oopic.delay=200
+    call mturnl
+    oopic.delay=200
+    call mrturnl
+    oopic.delay=200
+    call mturnr
+    oopic.delay=200
+    call mrturnr
+    oopic.delay=200
+    call mstop
+    do
+    loop
+end sub
+
+
+
+
+' early right wall hug with front-look stop
+' no candle check necessary
+' 80,60,40 is office wall-hug
+' 90,70,50 is maze wall-hug
+
+sub rwhug1()
+	do
+		if (gp12x>fthr) then
+			exit do
+		end if
+		if (gp12w > wh2ouch) then
+			call mrotatel
+		elseif (gp12w > wh2bad) then
+			call mgturnl
+			call velchk
+		elseif (gp12w > wh2ok) then
+			call mforward
+			call velchk
+		else
+			call mgturnr
+			call velchk
+		end if
+	loop
+	call mstop
+end sub
+
+sub rwhug2()
+
+	' late right wall hug
+	' front-look with evasive left turn
+	' velocity with evasive reverse and left turn
+	' must check for candle
+
+	do
+
+		if (uvCt>=4) then
+			call foundcandle
+		end if
+
+		if (gp12x>fthr) then
+			wclock.operate=cvFalse
+			call mstop
+			call mrotatel
+			oopic.delay=50
+			call mstop
+			wclock.operate=cvTrue
+		end if
+
+        ' 80,60,40 is office wall-hug
+        ' 90,70,50 is maze wall-hug
+        ' 95,90,70 is close wall-hug
+
+        if (gp12w > wh2ouch) then
+            call mrotatel
+        elseif (gp12w > wh2bad) then
+            call mgturnl
+            call velchk
+        elseif (gp12w > wh2ok) then
+            call mforward
+            call velchk
+        else
+            call mgturnr
+            call velchk
+        end if
+
+    loop
+
+end sub
+
+sub velchk()
+
+    ' do a bunch of samples
+    ' if velocity differential never
+    ' gets  bigger, then robot is stalled
+    ' (play with loop counter to get best results)
+
+    vel0=gp12v
+    for ii=1 to 10            ' 12 is default
+        vel1=gp12v
+        if (vel0>vel1) then
+            veld=vel0-vel1
+        else
+            veld=vel1-vel0
+        end if
+        if (veld>5) then
+            exit for
+        end if
+    next ii
+
+    ' small difference means no velocity achieved
+    ' so perform evasive maneuver (off the clock)
+
+    if (veld<=5) then
+        wclock.operate=cvFalse
+        call mbackup
+        oopic.delay=70
+        call mrotatel
+        oopic.delay=50
+        wclock.operate=cvTrue
+    end if
+
+end sub
+
+
+
+
+
+sub foundcandle()
+
+    call mstop
+    call tune
+
+    do
+
+        ' wall hug for min of 1:40 seconds
+
+        jj=0
+        while (jj<100)
+
+            ' do close wall hug
+
+            if (gp12w > wh2ouch) then
+                call mrotatel
+            elseif (gp12w > wh2bad) then
+                call mgturnl
+                call velchk
+            elseif (gp12w > wh2ok) then
+                call mforward
+                call velchk
+            else
+                call mgturnr
+                call velchk
+            end if
+
+        wend
+
+        ' then 360 CCW spin search for candle
+
+        cfound=0
+        jj=0
+        while (jj<200)
+            call mrotatel2
+            if (cfound=1) then
+                call extinguish
+            end if
+        wend
+
+    loop
+
+end sub
+
+
+
+sub extinguish()
+
+	call mstop
+	call tune
+
+	wclock.operate=cvFalse	' off the clock
+	cthr=cthr+30		' back off a bit on threshold
+	cfound=0			' (be sure to find it again)
+
+	ii=3
+	do
+
+		call mrotater2		' turn CW a bit
+		oopic.delay=20
+		call mstop
+
+		call mforward		' scoot forward a bit
+		oopic.delay=16
+		call mstop
+
+		for jj=1 to 2
+			fan=1			' blow
+			oopic.delay=ii*100
+			fan=0
+			oopic.delay=120	' check
+			if (uvCt=0) then
+				exit do
+			end if
+		next jj
+		ii=ii+1
+
+		call mrotater2		' turn CW a bit
+		oopic.delay=20
+		call mstop
+
+		cfound=0
+		while (cfound=0)
+			call mrotatel2
+		wend
+
+	loop
+
+	' DONE -- SUCCESS
+
+	do
+		call tune
+		oopic.delay=20
+	loop
+
+end sub
+
+
+
+'------------------------------------------------------
+' SOUND SUBROUTINES
+'
+sub initsound()
+    pp.ioline=1
+    pp.prescale=2
+    pp.period=255
+    pp.value=8
+end sub
+
+sub tone(bPer as oByte, bDur as oByte)
+    pp.period=bPer
+    pp.operate=cvTrue
+    oopic.delay=bDur
+    pp.operate=cvFalse
+end sub
+
+sub tune()
+        call tone(224,5)    ' F
+        call tone(211,5)    ' F#
+        call tone(199,5)    ' G
+        call tone(188,5)    ' G#
+        call tone(177,5)    ' A
+end sub
+
+
+
+
+
+'------------------------------------------------------
+' Event-Driven UVTron Monitoring routines
+' uvCt is number of UVTron pulses per second
+' (4 PPS is a good FF threshold for stock UVTron)
+'
+sub inituv()
+    uvIn.ioline=30
+    uvIn.direction=cvInput
+    uvGate1.input1.link(uvIn)
+    uvGate1.output.link(uvPEvent.operate)
+    uvGate1.operate=cvtrue
+    uvGate2.input1.link(oopic.hz1)
+    uvGate2.output.link(uvTEvent.operate)
+    uvGate2.operate=cvtrue
+    uvCtx=0
+    uvCt=0
+end sub
+
+sub uvPEvent_code()
+        uvCtx=uvCtx+1
+end sub
+
+sub uvTEvent_code()
+        uvCt=uvCtx
+        uvCtx=0
+end sub
+
+sub testuv()
+    do
+        if (uvCt>=4) then
+            call tone(177,5)    ' yes
+        else
+            call tone(224,5)    ' no
+        end if
+    loop
+end sub
+
+
+
+'------------------------------------------------------
+' Event-Driven Candle Spotting Comparator
+' (acq threshold should be lower than re-acq threshold)
+'
+sub initctrack()
+	seek.ioline=1
+	seek.operate=cvtrue
+	seekchk.input1.link(seek.value)
+	seekchk.input2.link(cthr.value)
+	seekchk.mode=cvSubtract
+	seekchk.operate=cvTrue
+	seekgate.input1.link(seekchk.negative)
+	seekgate.output.link(cEvent.operate)
+	seekgate.operate=cvTrue
+'	cthr=candlethr
+	if (seek>152) then
+		cthr=seek+(-120)
+	else
+		cthr=32
+	end if
+	cfound=0
+end sub
+
+sub cEvent_code()
+    cfound=1
+end sub
+
+sub testspotter()
+    do
+        ii=seek
+        if (ii<40) then
+            ii=40
+        end if
+        if (ii>224) then
+            ii=224
+        end if
+        call tone(ii,5)
+    loop
+end sub
+
+
+sub testadapt()
+    do
+        ii=seek
+        if (ii<cthr) then
+            ii=40
+        else
+            ii=224
+        end if
+        call tone(ii,5)
+    loop
+end sub
+
+
+
+sub tonestart()
+    '
+    ' frequency counter tuned to my beeper
+    ' (hijack uvIn and wclock for a while)
+    ' (nominal count is 147-148)
+    '
+    uvIn.ioline=23
+    wclock.clockin1.link(uvIn)
+    do
+        jj=0
+        oopic.delay=5
+        ii=jj
+        if ((ii>=142) and (ii<=152)) then
+            exit do
+        end if
+        call tone(230,1)    ' idle beep
+    loop
+    uvIn.ioline=30
+    wclock.clockin1.link(oopic.hz60)
+end sub
