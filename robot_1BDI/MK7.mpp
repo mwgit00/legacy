@@ -1,0 +1,350 @@
+--------------------------------------------------------------------------------
+
+                        |==========|
+                        | MAP FILE |
+                        |==========|
+
+                Project file:  C:\Program Files\BasicX Environment\LEELA\MK7.BXP
+                        Date:  2001/04/19 15:35:54
+                 DLL version:  1.46.21
+                   Optimizer:  On
+  Max variable length string:  64 characters
+          Strict syntax mode:  On
+
+              Processor type:  BX-24
+
+       Code memory available:  32768 bytes
+       Code memory allocated:  7172 bytes
+
+               RAM available:  401 bytes
+               RAM allocated:  120 bytes
+             Main stack size:  281 bytes
+
+ Persistent memory available:  480 bytes
+ Persistent memory allocated:  0 bytes
+
+--------------------------------------------------------------------------------
+
+MODULE-LEVEL (STATIC) RAM VARIABLES
+-----------------------------------
+
+               Size    Variable
+   Address    (Bytes)    Name
+
+       207         2   leela.cmode
+       209         2   imgproc.gl_wally
+       211         2   imgproc.gl_wallf
+       213         2   imgproc.gl_candlex
+       215         2   imgproc.gl_candley
+       217         2   imgproc.gl_candler
+       219         2   imgproc.gl_dyn_y1
+       221         2   imgproc.gl_dyn_y2
+       223        13   stemlib.bbuff
+       236         4   imgproc.zz
+       240        64   imgproc.aaa
+       304        13   serialport.inputbuffer
+       317        10   serialport.outputbuffer
+
+--------------------------------------------------------------------------------
+
+PERSISTENT VARIABLES
+--------------------
+
+               Size    Variable
+   Address    (Bytes)    Name
+
+            (none)
+
+--------------------------------------------------------------------------------
+
+SUBPROGRAM LOCAL DATA
+---------------------
+
+   FORMAL PARAMETERS
+
+               Size    Variable
+   Address    (Bytes)    Name
+
+         9         2   leela.beep.nbeep
+        11         2   leela.beep.nfreq
+         9         2   imgproc.findcandle.y1
+        11         2   imgproc.findcandle.y2
+         9         2   imgproc.getcolordata.boffset
+         9         2   imgproc.savecolordata.boffset
+         9         2   imgproc.colormatch.br
+        11         2   imgproc.colormatch.bg
+        13         2   imgproc.colormatch.bb
+         9         2   serialport.openserialport.portnumber
+        11         4   serialport.openserialport.baudrate
+         9         2   serialport.putbyte.value
+         9         2   serialport.getbyte.value
+        11         2   serialport.getbyte.success
+         9         2   serialport.putline.tx
+         9         2   serialport.putstr.tx
+         9         2   serialport.putb.value
+         9         2   serialport.puthexb.value
+         9         2   serialport.puti.value
+         9         2   serialport.putui.value
+         9         4   serialport.putul.value
+         9         4   serialport.putl.value
+         9         4   serialport.putsci.value
+         9         4   serialport.puts.value
+         9         2   ramcam.fn_inportb.baddr
+         9         2   ramcam.outportb.baddr
+        11         2   ramcam.outportb.bdata
+         9         2   ramcam.write_i2c.i2caddr
+        11         2   ramcam.write_i2c.i2cdata
+         9         2   ramcam.fn_read_i2c.i2caddr
+         9         2   stemlib.configdigio.biopin
+        11         2   stemlib.configdigio.bcfg
+         9         2   stemlib.digiowrite.biopin
+        11         2   stemlib.digiowrite.bval
+         9         2   stemlib.readdigio.biopin
+         9         2   stemlib.readpad.bpad
+         9         2   stemlib.writepad.bindex
+        11         2   stemlib.writepad.bval
+         9         2   stemlib.reada2d.bch
+         9         2   stemlib.firereflex.brflx
+         9         2   trinity.gomotor.blm
+        11         2   trinity.gomotor.brm
+         9         2   trinity.scoot.blm
+        11         2   trinity.scoot.brm
+        13         4   trinity.scoot.ftm
+         9         2   trinity.beepcmp.b1
+        11         2   trinity.beepcmp.b2
+         9         2   trinity.poop.bb0
+         9         4   serialport.insertzeros.x
+         9         4   serialport.splitfloat.value
+        13         2   serialport.splitfloat.mantissa
+        15         2   serialport.splitfloat.exponent
+
+   LOCAL VARIABLES
+
+         9         2   leela.main.nn
+        11         1   leela.main.bchar
+        12         1   leela.main.bflag
+         9         1   leela.initbx.tmp~0017
+        10         1   leela.initbx.tmp~0018
+        13         1   leela.beep.tmp~0019
+        14         1   leela.beep.tmp~0020
+         9         2   imgproc.findwall.addr
+        11         2   imgproc.findwall.addrl
+        13         2   imgproc.findwall.addrh
+        15         2   imgproc.findwall.ii
+        17         2   imgproc.findwall.jj
+        19         2   imgproc.findwall.kk
+        21         2   imgproc.findwall.kkmax
+        23         1   imgproc.findwall.cpixg
+        24         1   imgproc.findwall.cpixb
+        25         4   imgproc.findwall.fthr
+        29         4   imgproc.findwall.fmax
+        33         4   imgproc.findwall.ff
+        37         4   imgproc.findwall.a9
+        41         4   imgproc.findwall.a8
+        45         4   imgproc.findwall.a7
+        49         4   imgproc.findwall.a6
+        53         4   imgproc.findwall.a5
+        57         4   imgproc.findwall.a4
+        61         4   imgproc.findwall.a3
+        65         4   imgproc.findwall.a2
+        69         4   imgproc.findwall.a1
+        73         2   imgproc.findwall.tmp~0021
+        75         2   imgproc.findwall.tmp~0022
+        13         2   imgproc.findcandle.addr
+        15         2   imgproc.findcandle.addrl
+        17         2   imgproc.findcandle.addrh
+        19         2   imgproc.findcandle.jj
+        21         1   imgproc.findcandle.thr
+        22         1   imgproc.findcandle.cpixr
+        23         1   imgproc.findcandle.cpixg
+        24         2   imgproc.findcandle.nacc1
+        26         2   imgproc.findcandle.naccrun
+        28         2   imgproc.findcandle.naccmaxr
+        30         2   imgproc.findcandle.naccmaxx
+        32         2   imgproc.findcandle.naccmaxy
+        34         2   imgproc.findcandle.naccmax1
+        36         1   imgproc.findcandle.bpre
+        37         2   imgproc.findcandle.tmp~0023
+        39         2   imgproc.findcandle.tmp~0024
+         9         1   imgproc.getsingle.bchar
+        10         1   imgproc.getsingle.bflag
+        11         4   imgproc.getsingle.qq
+        15         2   imgproc.getsingle.tmp~0025
+        17         2   imgproc.getsingle.tmp~0026
+         9         4   imgproc.rxcolordata.xx
+        13         2   imgproc.rxcolordata.tmp~0027
+        15         2   imgproc.rxcolordata.tmp~0028
+        11         4   imgproc.getcolordata.laddr
+        11         4   imgproc.savecolordata.laddr
+         9         2   imgproc.findtube.jj
+        11         1   imgproc.findtube.cpixr
+        12         1   imgproc.findtube.cpixg
+        13         1   imgproc.findtube.cpixb
+        14         4   imgproc.findtube.thr
+        18         4   imgproc.findtube.val
+        22         2   imgproc.findtube.nacc1
+        24         2   imgproc.findtube.naccrun
+        26         2   imgproc.findtube.naccmaxr
+        28         2   imgproc.findtube.naccmaxx
+        30         2   imgproc.findtube.naccmax1
+        32         1   imgproc.findtube.bpre
+        33         2   imgproc.findtube.tmp~0029
+        35         2   imgproc.findtube.tmp~0030
+        15         4   imgproc.colormatch.pr
+        19         4   imgproc.colormatch.pg
+        23         4   imgproc.colormatch.pb
+        27         4   imgproc.colormatch.q1
+        31         4   imgproc.colormatch.q2
+        35         4   imgproc.colormatch.q3
+        11         2   serialport.putstr.length
+        13         3   serialport.putstr.ch
+        16         1   serialport.putstr.bch
+        17         2   serialport.putstr.tmp~0031
+        19         2   serialport.putstr.tmp~0032
+        11         3   serialport.putb.digit
+        14         2   serialport.putb.ndigits
+        16         2   serialport.putb.tmp~0033
+        18         2   serialport.putb.tmp~0034
+        11         2   serialport.puthexb.digit
+        13         1   serialport.puthexb.d
+        14         2   serialport.puthexb.ndigits
+        16         2   serialport.puthexb.tmp~0035
+        18         2   serialport.puthexb.tmp~0036
+        11         4   serialport.putui.l
+        15         2   serialport.putui.tmp
+        13         4   serialport.putul.ul
+        17         4   serialport.putul.l
+        21         4   serialport.putul.digit
+        25         4   serialport.putul.temp
+        29         2   serialport.putul.tmp~0037
+        31         2   serialport.putul.tmp~0038
+        13        10   serialport.putl.digit
+        23         2   serialport.putl.ndigits
+        25         2   serialport.putl.tmp~0039
+        27         2   serialport.putl.tmp~0040
+        13         4   serialport.putsci.mantissa
+        17         2   serialport.putsci.exponent
+        19         4   serialport.putsci.lmant
+        13         1   serialport.insertzeros.numzeros
+        14         1   serialport.insertzeros.tmp~0041
+        15         1   serialport.insertzeros.tmp~0042
+        13         4   serialport.puts.x
+        17         2   serialport.puts.decimalplace
+        19         4   serialport.puts.mantissa
+        23         2   serialport.puts.exponent
+        25         4   serialport.puts.factor
+        29         4   serialport.puts.lmant
+        33         1   serialport.puts.decimalhasdisplayed
+        34         2   serialport.puts.tmp~0043
+        36         2   serialport.puts.tmp~0044
+        17         4   serialport.splitfloat.x
+        21         4   serialport.splitfloat.factor
+         9         1   ramcam.initcolormode.i
+         9         1   ramcam.initflamemode.i
+         9         1   ramcam.acquire.bdata
+         9         1   ramcam.imagedump.bdata
+        10         2   ramcam.imagedump.tmp~0045
+        12         2   ramcam.imagedump.tmp~0046
+         9         1   ramcam.sr_blink.bdata
+        10         1   ramcam.sr_blink.tmp~0047
+        11         1   ramcam.sr_blink.tmp~0048
+         9         1   stemlib.sendpacket.tmp~0049
+        10         1   stemlib.sendpacket.tmp~0050
+         9         1   stemlib.getpacket.bflag
+        10         1   stemlib.getpacket.bchar
+        11         1   stemlib.getpacket.tmp~0051
+        12         1   stemlib.getpacket.tmp~0052
+         9         1   imgtest.imgproctest.bchar
+        10         1   imgtest.imgproctest.bflag
+        11         1   imgtest.imgproctest.tmp~0053
+        12         1   imgtest.imgproctest.tmp~0054
+         9         2   trinity.trinity.ii
+        11         2   trinity.trinity.foo
+        13         1   trinity.trinity.brange
+        14         1   trinity.trinity.brr
+        15         1   trinity.trinity.tmp~0055
+        16         1   trinity.trinity.tmp~0056
+         9         1   trinity.hugandseek.i
+        10         1   trinity.hugandseek.brange
+         9         1   trinity.calign.n
+        10         1   trinity.calign.bfound
+         9         1   trinity.gotocandle.i
+        10         1   trinity.gotocandle.brange
+        11         1   trinity.poop.bb1
+        12         1   trinity.poop.bb2
+
+--------------------------------------------------------------------------------
+
+CODE MEMORY
+-----------
+
+   SUBPROGRAMS
+
+    Start      Size    Subprogram
+   Address    (Bytes)     Name
+
+         0         7   [Startup code]
+         7       267   leela.main
+       274       118   leela.beep
+       392        56   leela.initbx
+       448       318   leela.song
+       766        51   ramcam.initcamera
+       817        72   sys~library.sys~delay
+       889        38   serialport.openserialport
+       927        13   serialport.putbyte
+       940        38   serialport.getbyte
+       978       800   trinity.trinity
+      1778       800   imgtest.imgproctest
+      2578        45   leela.blinkgreen
+      2623        45   leela.blinkred
+      2668        44   ramcam.outportb
+      2712        90   ramcam.sr_blink
+      2802       134   ramcam.initflamemode
+      2936        47   stemlib.firereflex
+      2983        48   stemlib.writepad
+      3031        48   stemlib.configdigio
+      3079        66   stemlib.readdigio
+      3145        63   stemlib.readpad
+      3208        46   trinity.scoot
+      3254        66   stemlib.reada2d
+      3320        62   stemlib.readir02
+      3382        91   trinity.gomotor
+      3473        70   trinity.candlescan
+      3543       123   trinity.calign
+      3666       241   trinity.gotocandle
+      3907        36   trinity.endbad
+      3943        17   trinity.fullstop
+      3960       102   trinity.hugandseek
+      4062       102   ramcam.initcolormode
+      4164       108   ramcam.acquire
+      4272       114   ramcam.imagedump
+      4386       379   imgproc.findcandle
+      4765       122   imgproc.rxcolordata
+      4887       357   imgproc.findwall
+      5244        49   ramcam.fn_inportb
+      5293        68   ramcam.write_i2c
+      5361        73   ramcam.fn_read_i2c
+      5434        83   stemlib.sendpacket
+      5517       121   stemlib.getpacket
+      5638        49   trinity.beepcmp
+      5687       113   trinity.extinguish
+      5800       145   trinity.endgame
+      5945        87   imgproc.getsingle
+      6032       261   serialport.putsci
+      6293        29   sys~library.sys~cint
+      6322        48   stemlib.digiowrite
+      6370        31   trinity.endgood
+      6401       215   serialport.splitfloat
+      6616       157   serialport.insertzeros
+      6773       141   serialport.putl
+      6914        17   serialport.puti
+      6931       126   sys~library.sys~clng
+      7057        43   sys~library.sys~fix
+      7100        72   sys~library.sys~fixul
+      7171        --   [End code]
+
+   BLOCK DATA
+
+            (none)
+
+--------------------------------------------------------------------------------

@@ -1,0 +1,204 @@
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aPad.tea>
+#include <aGPM.tea>
+#include <aMulti.tea>
+#include <aMath.tea>
+
+#define	aGPS_ADDR	(unsigned char)0xD0
+
+#define	aGPS_ERR_NONE		0
+#define	aGPS_ERR_OVERFLOW	1
+
+#define aGPS_POS_A		0
+#define	aGPS_LAT_A		0
+#define	aGPS_LAT_DEG_A		0
+#define	aGPS_LAT_MIN_A		2
+#define	aGPS_LAT_FRAC_A		4
+#define	aGPS_LONG_A		6
+#define	aGPS_LONG_DEG_A		6
+#define	aGPS_LONG_MIN_A		8
+#define	aGPS_LONG_FRAC_A	10
+
+#define aGPS_POS_B		12
+#define	aGPS_LAT_B		12
+#define	aGPS_LAT_DEG_B		12
+#define	aGPS_LAT_MIN_B		14
+#define	aGPS_LAT_FRAC_B		16
+#define	aGPS_LONG_B		18
+#define	aGPS_LONG_DEG_B		18
+#define	aGPS_LONG_MIN_B		20
+#define	aGPS_LONG_FRAC_B	22
+
+#define	aGPS_HDOP		26
+#define	aGPS_HEADING		28
+#define	aGPS_SPEED		30
+
+#define	aGPS_ERROR		55
+
+#define aGPS_ErrLat		aGPS_SubPosAfromB(90,  aGPS_LAT_A,  aGPS_LAT_B)
+#define aGPS_ErrLong		aGPS_SubPosAfromB(360, aGPS_LONG_A, aGPS_LONG_B)
+
+void aGPS_DumpLatLong(char index)
+{
+  int dlat;
+  int dlong;
+  int s;
+
+  dlat = aPad_ReadInt(index);
+  dlong = aPad_ReadInt(index + 6);
+
+  s = 1;
+  if (dlat < 0) s = -1;
+  aPrint_IntDec(dlat);
+  aPrint_Char(':');
+  aPrint_IntDec(s * aPad_ReadInt(index + 2));
+  aPrint_Char(':');
+  aPrint_IntDec(s * aPad_ReadInt(index + 4));
+  aPrint_Char('\n');
+
+  s = 1;
+  if (dlong < 0) s = -1;
+  aPrint_IntDec(dlong);
+  aPrint_Char(':');
+  aPrint_IntDec(s * aPad_ReadInt(index + 8));
+  aPrint_Char(':');
+  aPrint_IntDec(s * aPad_ReadInt(index + 10));
+  aPrint_Char('\n');
+  
+  aPrint_IntDec(aPad_ReadInt(aGPS_HDOP));
+  aPrint_Char('\n');
+}
+
+void aGPS_AssignCoord(char index, char dir, int deg, int min, int fracmin)
+{
+  if ((dir == 'S') || (dir == 'W')) {
+    deg = -deg;
+    min = -min;
+    fracmin = -fracmin;
+  }
+  aPad_WriteInt(index, deg);
+  aPad_WriteInt(index + 2, min);
+  aPad_WriteInt(index + 4, fracmin);
+}
+
+void aGPS_ReadLatLongGPM(char index)
+{
+  char dir;
+  int d, m, f;
+
+  d = aGPM_GetLatitudeDegrees(aGPS_ADDR);
+  m = aGPM_GetLatitudeMinutes(aGPS_ADDR);
+  f = aGPM_GetLatitudeFrac(aGPS_ADDR);
+  dir =	aGPM_GetLatitudeDirChar(aGPS_ADDR);
+  aGPS_AssignCoord(index, dir, d, m, f);
+
+  d = aGPM_GetLongitudeDegrees(aGPS_ADDR);
+  m = aGPM_GetLongitudeMinutes(aGPS_ADDR);
+  f = aGPM_GetLongitudeFrac(aGPS_ADDR);
+  dir = aGPM_GetLongitudeDirChar(aGPS_ADDR);
+  aGPS_AssignCoord(index + 6, dir, d, m, f);
+  
+  aPad_WriteInt(aGPS_HDOP, aGPM_GetHDOP(aGPS_ADDR));
+}
+
+int aGPS_SubPosAfromB(int xdeg, char ca, char cb)
+{
+  int da, ma, fa;
+  int db, mb, fb;
+  int d_f;
+  int d_m;
+  int d_d;
+  int val;
+  int sign = 1;
+  char error = 0;
+
+  // extract coordinates from pad
+  da = aPad_ReadInt(ca);
+  ma = aPad_ReadInt(ca + 2);
+  fa = aPad_ReadInt(ca + 4);
+  db = aPad_ReadInt(cb);
+  mb = aPad_ReadInt(cb + 2);
+  fb = aPad_ReadInt(cb + 4);
+
+  // subtract fractional minutes
+  // possibly borrow 1000 fractional minutes from minute term
+  d_f = fb - fa;
+  if (d_f < 0) {
+    d_f = 1000 + d_f;
+    mb = mb - 1;
+  }
+
+  // subtract minutes
+  // possibly borrow 60 minutes from degree term
+  d_m = mb - ma;
+  if (d_m < 0) {
+    d_m = 60 + d_m;
+    db = db - 1;
+  }
+
+  // subtract degrees
+  // possibly borrow X degrees and set sign flag
+  d_d = db - da;
+  if (da > db) {
+    d_d = xdeg + d_d;
+    sign = -1;
+  }
+
+  // invert negative result
+  // to make degrees, minutes, fraction all positive
+  if (sign == -1) {
+    d_d = xdeg - d_d - 1;
+    d_m = 59 - d_m;
+    d_f = 1000 - d_f;
+  }
+
+  // get magnitude of difference in fractional minutes  
+  val = (d_f + d_m * 1000) * sign;
+
+  // more than 32 minutes is overflow
+  // non-zero degrees is overflow
+  if (d_m >= 32) error = aGPS_ERR_OVERFLOW;
+  if (d_d != 0) error = aGPS_ERR_OVERFLOW;
+  aPad_WriteChar(aGPS_ERROR, error);
+
+  return val;
+}
+
+int aGPS_GetHeadingFromPosErr(int dlat, int dlong)
+{
+  int heading = -1;
+
+  // divide down values into range for atan function
+  // then convert errors to heading
+  while ((aMath_Absval(dlat) > 1000) || (aMath_Absval(dlong) > 1000)) {
+    dlat = dlat >> 1;
+    dlong = dlong >> 1; 
+  }
+  heading = aMath_Atan2(dlong, dlat);
+
+  return heading;
+}
+
+int aGPS_GetHeadingFromAtoB()
+{
+  int dlong = 0;
+  int dlat = 0;
+  int heading = -1;
+  char error = 0;
+
+  // get difference
+  dlat =  aGPS_ErrLat;
+  error = aPad_ReadChar(aGPS_ERROR);
+  
+  if (!error) {
+    dlong = aGPS_ErrLong;
+    error = aPad_ReadChar(aGPS_ERROR);
+  }
+
+  if (!error)
+    heading = aGPS_GetHeadingFromPosErr(dlat, dlong);
+
+  // heading will be -1 if error occurred
+  return heading;
+}

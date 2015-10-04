@@ -1,0 +1,13 @@
+#include "gpslib.tea"
+
+void main(char callingProc)
+{
+  if (1) {
+    aGPS_ReadLatLongGPM(aGPS_POS_A);
+  } else {
+    /* retrieve waypoint from EEPROM and store in B */
+    aGPS_AssignCoord(aGPS_LAT_B,  'N', 40,  1, 642);
+    aGPS_AssignCoord(aGPS_LONG_B, 'W',105, 14, 366);
+  }
+  aMulti_Halt(callingProc, 0);
+}

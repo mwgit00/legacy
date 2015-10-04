@@ -1,0 +1,56 @@
+'-------------------------------------------------------------------------------
+Option Explicit
+
+' leela_cmode data type: Integer
+Public Const leela_cmode As Integer = 207 ' &HCF
+Public Const leela_cmode_IsPersistent As Boolean = False
+
+' imgproc_gl_wally data type: Integer
+Public Const imgproc_gl_wally As Integer = 209 ' &HD1
+Public Const imgproc_gl_wally_IsPersistent As Boolean = False
+
+' imgproc_gl_wallf data type: Integer
+Public Const imgproc_gl_wallf As Integer = 211 ' &HD3
+Public Const imgproc_gl_wallf_IsPersistent As Boolean = False
+
+' imgproc_gl_candlex data type: Integer
+Public Const imgproc_gl_candlex As Integer = 213 ' &HD5
+Public Const imgproc_gl_candlex_IsPersistent As Boolean = False
+
+' imgproc_gl_candley data type: Integer
+Public Const imgproc_gl_candley As Integer = 215 ' &HD7
+Public Const imgproc_gl_candley_IsPersistent As Boolean = False
+
+' imgproc_gl_candler data type: Integer
+Public Const imgproc_gl_candler As Integer = 217 ' &HD9
+Public Const imgproc_gl_candler_IsPersistent As Boolean = False
+
+' imgproc_gl_dyn_y1 data type: Integer
+Public Const imgproc_gl_dyn_y1 As Integer = 219 ' &HDB
+Public Const imgproc_gl_dyn_y1_IsPersistent As Boolean = False
+
+' imgproc_gl_dyn_y2 data type: Integer
+Public Const imgproc_gl_dyn_y2 As Integer = 221 ' &HDD
+Public Const imgproc_gl_dyn_y2_IsPersistent As Boolean = False
+
+' stemlib_bbuff data type: Byte
+Public Const stemlib_bbuff As Integer = 223 ' &HDF
+Public Const stemlib_bbuff_IsPersistent As Boolean = False
+
+' imgproc_zz data type: Single
+Public Const imgproc_zz As Integer = 236 ' &HEC
+Public Const imgproc_zz_IsPersistent As Boolean = False
+
+' imgproc_aaa data type: Single
+Public Const imgproc_aaa As Integer = 240 ' &HF0
+Public Const imgproc_aaa_IsPersistent As Boolean = False
+
+' serialport_inputbuffer data type: Byte
+Public Const serialport_inputbuffer As Integer = 304 ' &H130
+Public Const serialport_inputbuffer_IsPersistent As Boolean = False
+
+' serialport_outputbuffer data type: Byte
+Public Const serialport_outputbuffer As Integer = 317 ' &H13D
+Public Const serialport_outputbuffer_IsPersistent As Boolean = False
+
+'-------------------------------------------------------------------------------

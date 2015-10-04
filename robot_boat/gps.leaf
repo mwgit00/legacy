@@ -1,0 +1,37 @@
+#include "gpsdefs.tea"
+
+#define	msgAUTOBEAT		127
+#define	msgAUTOSTART	126
+#define	msgLINKCHKOFF	125
+
+#define msgLAUNCHgpsb	124
+
+/* auto start reflex */
+/* runs main program when robot is powered-up */
+/* and not connected to host */
+
+module[STEMADDR] {
+
+  message[msgAUTOBEAT] {
+    STEMADDR, cmdVAL_SET, 5, 1
+  }
+  message[msgAUTOSTART] {
+    STEMADDR, cmdVM_RUN, 7, PROG_MAIN, PROC_MAIN
+  }
+  message[msgLINKCHKOFF] {
+    STEMADDR, cmdVAL_SET, 7, 0
+  }
+
+  message[msgLAUNCHgpsb] {
+    STEMADDR, cmdVM_RUN, 7, PROG_CMPGUID, PROC_CMPGUID
+  }
+
+  vector[aGP_RFX_LINKDOWN] {
+    msgLINKCHKOFF,
+    msgAUTOBEAT,
+    msgAUTOSTART
+  }
+  vector[vecLAUNCH_CMPGUID] {
+    msgLAUNCHgpsb
+  }
+}
