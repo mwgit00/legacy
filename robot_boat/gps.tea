@@ -1,0 +1,75 @@
+#include "gpslib.tea"
+
+// Acroname Inc.
+// N  40 01.628
+// W 105 14.389
+
+// Sign at Park
+// N  40 01.642
+// W 105 14.366
+
+void dump(int x)
+{
+  aPrint_IntDec(x);
+  aPrint_Char(',');
+}
+
+void endln()
+{
+  aPrint_Char('\n');
+}
+
+void dir_test()
+{
+  int dlat = 0;
+  int dlong = 0;
+  int h = 0;
+
+  // use home position for test
+  aGPS_AssignCoord(aGPS_LAT_A,  'N', 40,  1, 628);
+  aGPS_AssignCoord(aGPS_LONG_A, 'W',105, 14, 389);
+
+  dlat =  aGPS_ErrLat;
+  dlong = aGPS_ErrLong;
+  h = aGPS_GetHeadingFromAtoB();
+
+  dump(dlat);
+  dump(dlong);
+  dump(h);
+  endln();
+}
+
+void main()
+{
+  int dlong;
+  int dlat;
+  int dir;
+  int m = 0;
+  int h;
+  int hfrac;
+
+  aCore_Sleep(10000);
+  aPrint_String("GPS Demo\n");
+  aCore_Sleep(30000);
+
+  // assign target
+  aGPS_AssignCoord(aGPS_LAT_B,  'N', 40,  1, 642);
+  aGPS_AssignCoord(aGPS_LONG_B, 'W',105, 14, 366);
+
+//  dir_test();
+
+  while (0) {
+
+    aGPS_ReadLatLongGPM(aGPS_POS_A);
+    aGPS_DumpLatLong(aGPS_POS_A);
+    aCore_Sleep(100);
+
+    h = aGPM_GetTrueHeading(aGPS_ADDR);
+    dir = aGPS_GetHeadingFromAtoB();  
+    dump(h);
+    dump(dir);
+    endln();
+ 
+    aCore_Sleep(10000);
+  }
+}

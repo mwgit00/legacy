@@ -1,0 +1,50 @@
+#include "gpslib.tea"
+
+// Acroname Inc.
+// N  40 01.628
+// W 105 14.389
+
+// Sign at Park
+// N  40 01.642
+// W 105 14.366
+
+void main()
+{
+  char flag = 0;
+  int htarg = 0;
+  int hprev = 0;
+  int hdiff = 0;
+
+  aCore_Sleep(10000);
+  aCore_Sleep(30000);
+
+  // assign target
+  aGPS_AssignCoord(aGPS_LAT_B,  'N', 40,  1, 642);
+  aGPS_AssignCoord(aGPS_LONG_B, 'W',105, 14, 366);
+
+  while (1) {
+
+    flag = aGPM_GetPosFoundFlag(aGPS_ADDR);
+
+    aCore_Outportc(aPortVMQuiet, 1);
+    if (flag) {
+      aMulti_Run00(1,1);
+      htarg = aMulti_Run00(2,1);
+      hdiff = htarg - hprev;
+      hprev = htarg;
+    } else {
+      hdiff = 0;
+    }
+    aCore_Sleep(100);
+    aCore_Outportc(aPortVMQuiet, 0);
+
+    aPrint_IntDec(flag);
+    aPrint_Char(':');
+    aPrint_IntDec(htarg);
+    aPrint_Char(',');
+    aPrint_IntDec(hdiff);
+    aPrint_Char('\n');
+ 
+    aCore_Sleep(9900);
+  }
+}

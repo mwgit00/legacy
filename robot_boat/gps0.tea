@@ -1,0 +1,39 @@
+#include "gpsdefs.tea"
+#include "gpsinc.tea"
+
+void main()
+{
+  char k;
+  int rate;
+  int heading;
+
+  aDig_Config(DTEST, ADIG_OUTPUT);
+  
+  for (k = 0; k !=5; k++)
+  {
+    aDig_Write(DTEST, 1);
+    aCore_Sleep(2000);
+    aDig_Write(DTEST, 0);
+    aCore_Sleep(18000);
+  }
+  
+  /* trigger reflex to launch compass guidance program */
+  trigger(vecLAUNCH_CMPGUID);
+  aCore_Sleep(100);
+  
+  heading = getCmpHeading;
+
+  while (1)
+  {
+    aDig_Write(DTEST, 1);
+    aCore_Sleep(2000);
+    aDig_Write(DTEST, 0);
+    aCore_Sleep(8000);
+    
+    rate = 1 + aA2D_ReadInt(0) / 64;
+
+    heading = getCmpHeading;
+    heading = (heading + rate) % 360;
+    setCmpHeading(heading);
+  }
+}

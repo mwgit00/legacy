@@ -1,0 +1,36 @@
+#include "gpslib.tea"
+
+void main(char callingProc)
+{
+  int h = 0;
+  int dlat = 0;
+  int dlong = 0;
+
+  int la0 = 0;
+  int la1 = 0;
+  int la2 = 0;
+
+  int lo0 = 0;
+  int lo1 = 0;
+  int lo2 = 0;
+
+  while (1) {  
+
+    aGPS_ReadLatLongGPM(aGPS_POS_A);
+    dlat = aGPS_ErrLat;
+    dlong = aGPS_ErrLong;
+    
+    la2 = la1;
+    la1 = la0;
+    la0 = dlat;
+
+    lo2 = lo1;
+    lo1 = lo0;
+    lo0 = dlong;
+    
+    aPad_WriteInt(0, la2 + la1 + la0 + dlat);
+    aPad_WriteInt(0, la2 + la1 + la0 + dlat);
+
+    aCore_Sleep(10000);
+  }
+}

@@ -1,0 +1,104 @@
+/* file: aMath.tea */
+
+#ifndef _aMath_T_
+#define _aMath_T_
+
+#define aMath_Sin100(x) aMath_Cos100((x + 270) % 360)
+
+int aMath_Absval(int x)
+{
+  if (x & 0x8000) x = -x;
+  return x;
+}
+
+int aMath_Signum(int x)
+{
+  if (x & 0x8000) {
+    x = -1;
+  } else if (x) {
+    x = 1;
+  }
+  return x;
+}
+
+int aMath_Cos100(int angle)
+{
+  int qop = angle;
+  int div = 101;
+
+  /* perform quadrant conversion */
+  /* (input is 0 to 359) */
+
+  if (angle > 90) {
+    qop = 180 - angle;
+    if (angle < 270) div = -101;
+  }
+  if (angle > 180) qop = angle - 180;
+  if (angle > 270) qop = 360 - angle;
+
+  /* quadratic fit for quadrant */
+  return ((10188 - qop * (qop + 23)) / div);
+}
+
+/* absolute value of parameters should */
+/* be less than 1000 to prevent overflow */
+int aMath_Atan2(int y, int x)
+{
+  int ax;
+  int ay;
+  int aq;
+  char flip = 0;
+
+  /* work in first quadrant */
+  ax = aMath_Absval(x);
+  ay = aMath_Absval(y);
+
+  /* approximation works when ax >= ay */
+  if (ax < ay) {
+    aq = ax;
+    ax = ay;
+    ay = aq;
+    flip = 1;
+  }
+
+  /* crank the numbers and handle 0 values */
+  if (ay) {
+    aq = (30 * ax) / ay;
+    if (!aq) {
+      aq = 90;
+    } else if (aq >= 82) {
+      aq = 1720 / aq;
+    } else {
+      aq = 1720 / (aq + 8);
+    }
+  } else {
+    /* atan(0,0) makes the program abort */
+    if (!ax) aq = aq / 0;
+    aq = 0;
+  }
+
+  /* adjust if ax and ay were flipped */
+  if (flip) {
+    aq = 90 - aq;
+  }
+
+  /* now get proper quadrant */
+  /* based on sign bits of x and y */
+  /* (default is quadrant 1) */
+  if (x & 0x8000) {
+    if (y & 0x8000) {
+      /* quadrant 3 */
+      aq = 180 + aq;
+    } else {
+      /* quadrant 2 */
+      aq = 180 - aq;
+    }
+  } else if (y & 0x8000) {
+    aq = 360 - aq;
+  }
+
+  /* force result to be 0 to 359 */
+  return (aq % 360);
+}
+
+#endif /* _aMath_T_ */

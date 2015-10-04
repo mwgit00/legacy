@@ -1,0 +1,76 @@
+#include "gpslib.tea"
+
+// n - d*(n/d)
+
+
+// Acroname Inc.
+// N  40 01.628
+// W 105 14.389
+
+
+// Valmont Park Sign
+// N  40 01.642
+// W 105 14.366
+
+
+void dir_test()
+{
+  int dlat;
+  int dlong;
+  int h;
+  dlat =  subAfromB(90,  aGPS_LAT_A,  aGPS_LAT_B);
+  dlong = subAfromB(360, aGPS_LONG_A, aGPS_LONG_B);
+  h = headingFromAtoB();
+  endln();
+}
+
+void main()
+{
+  int dlong;
+  int dlat;
+  int dir;
+  int m = 0;
+  int h;
+  int hfrac;
+
+  aCore_Sleep(10000);
+  aPrint_String("GPS Demo\n");
+  aCore_Sleep(30000);
+
+
+  assignCoord(aGPS_LAT_A,  'N', 40,  1, 628);
+  assignCoord(aGPS_LONG_A, 'W',105, 14, 389);
+
+  assignCoord(aGPS_LAT_B,  'N', 40,  1, 642);
+  assignCoord(aGPS_LONG_B, 'W',105, 14, 366);
+
+//dir_test();
+
+while (1) {
+
+  readLatLong(aGPS_POS_A);
+  dumpLatLong(aGPS_POS_A);
+  aCore_Sleep(100);
+
+  h = aGPM_GetTrueHeading(aGPS_ADDR);
+  hfrac = aGPM_GetTrueHeadingFrac(aGPS_ADDR);
+  dir = headingFromAtoB();  
+  dump(h);
+  dump(dir);
+  endln();
+ 
+  aCore_Sleep(10000);
+}
+
+
+
+  /*
+  while(1) {
+    m = m + 1;
+    aPrint_IntDec(m);
+    aPrint_Char('\n');
+    aMulti_Run00(1, 1);
+    aCore_Sleep(10000);
+  }
+  */
+}

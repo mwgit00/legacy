@@ -1,0 +1,15 @@
+#include "gpslib.tea"
+
+void main(char callingProc)
+{
+  int h;
+  int dlat;
+  int dlong;
+
+  dlat = aGPS_ErrLat;
+  dlong = aGPS_ErrLong;
+
+  h = aMath_Atan2(dlong, dlat);
+
+  aMulti_Halt(callingProc, h);
+}

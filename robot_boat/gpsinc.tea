@@ -1,0 +1,9 @@
+#include <aCore.tea>
+#include <aDig.tea>
+#include <aPrint.tea>
+#include <aPad.tea>
+#include <aA2D.tea>
+
+#define	trigger(x)			aCore_Outportc(aPortRawInput + x, 0)
+#define getCmpHeading		aCore_Inporti(aPortRflxCtr)
+#define setCmpHeading(x)	aCore_Outporti(aPortRflxCtr, x)

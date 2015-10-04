@@ -1,0 +1,130 @@
+/* compass guided boat program */
+/* uses Dinsmore 1525 2-channel analog compass with */
+/* sine-cosine outputs, 2.5V average with +-0.4V swing */
+
+#include <aCore.tea>
+#include <aDig.tea>
+#include <aA2D.tea>
+#include <aMath.tea>
+
+#define	DLIGHT	1	/* motor and light controls */
+#define	DMOTORR	2
+#define	DMOTORL	3
+
+#define	CCOMPA	3	/* analog inputs A and B from compass */
+#define	CCOMPB	4
+
+#define	CTRA	500	/* compass center points */
+#define	CTRB	516	/* (determined manually) */
+
+#define	ERRTHR	4	/* heading error threshold */
+
+#define	TDELAY	2500	/* delay time for motor tests */
+
+void init()
+{
+ /* configure outputs */
+ aDig_Config(DLIGHT,0);
+ aDig_Config(DMOTORL,0);
+ aDig_Config(DMOTORR,0);
+
+ /* flash light and run motors as hardware test */
+ aDig_Write(DLIGHT,1);
+ aDig_Write(DMOTORR,1);
+ aDig_Write(DMOTORL,1);
+ aCore_Sleep(TDELAY);
+ aDig_Write(DLIGHT,0);
+ aDig_Write(DMOTORR,0);
+ aDig_Write(DMOTORL,0);
+ steer(0,0);
+}
+
+void steer(char mR, char mL)
+{
+  aDig_Write(DMOTORR,mR);
+  aDig_Write(DMOTORL,mL);
+}
+
+int read_dinsmore()
+{
+  int h;
+  int ra;
+  int rb;
+  char aflag = 0;
+  char bflag = 0;
+  
+  /* get A and B for current heading */
+  ra=aA2D_ReadInt(CCOMPA);
+  rb=aA2D_ReadInt(CCOMPB);
+
+  /* convert to heading */
+  h = aMath_Atan2(ra - CTRA, rb - CTRB);
+
+  return h;
+}
+
+int getHeadingError(int dir0, int dirC)
+{
+  int e;
+  
+  e = dirC - dir0;
+  
+  /* handle wrap-around */
+  if (e < -180) e = e + 360;
+  if (e >  180) e = e - 360;
+  
+  return e;
+}
+
+void track()
+{
+  int d;
+  int e;
+  int h;
+  int emag;
+
+  while (1)
+  {
+    h = read_dinsmore();
+    d = aCore_Inporti(aPortRflxCtr);
+    e = getHeadingError(d, h);
+    emag = aMath_Absval(e);
+
+    if (emag < ERRTHR)
+    {
+      /* on course, green light on, full speed ahead */
+      aDig_Write(DLIGHT,1);
+      steer(1,1);
+    }
+    else
+    {
+      /* off course, green light off, steer to correct */
+      aDig_Write(DLIGHT,0);
+      if (e<0)
+      {
+        /* correct clockwise drift */
+        steer(1,0);
+      }
+      else
+      {
+        /* correct counter-clockwise drift */
+        steer(0,1);
+      }
+    }
+  }
+}  
+
+void main()
+{
+  int heading;
+
+  /* initialize and perform hardware test */
+  init();
+
+  /* get initial heading and save in common RAM */
+  heading = read_dinsmore();
+  aCore_Outporti(aPortRflxCtr, heading);
+
+  /* cruise */
+  track();
+}
