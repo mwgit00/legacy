@@ -1,0 +1,597 @@
+/*
+ *  untitled.h
+ *  
+ *
+ *  Created by Mark Whitney on 5/13/12.
+ *  Copyright 2012 __MyCompanyName__. All rights reserved.
+ *
+ */
+
+/* compass guided boat program */
+/* uses Dinsmore 1525 2-channel analog compass with */
+/* sine-cosine outputs, 2.5V average with +-0.4V swing */
+
+#include <aCore.tea>
+#include <aDig.tea>
+#include <aA2D.tea>
+#include <aMath.tea>
+#include <aMotion.tea>
+#include <aPrint.tea>
+
+#define DLIGHT 7 /* compass tracking light control */
+
+#define MLEFT 0 /* motor assignments */
+#define MRIGHT 1
+
+#define CCOMPA 1 /* analog inputs A and B from compass */
+#define CCOMPB 0
+
+#define CTRA 520 /* compass center points */
+#define CTRB 520 /* (determined manually) */
+
+#define ERRTHR 2 /* 3 degree (-1 to 1) heading error threshold */
+
+int SCALEFAC = 0;
+int DEGCUTOFF = 25;
+
+void init()
+{
+    /* configure outputs */
+    /* IO pin must be configured after motion stuff */
+    aMotion_SetMode(MLEFT, aMOTION_MODE_PWM, 0);
+    aMotion_SetMode(MRIGHT, aMOTION_MODE_PWM, 0);
+    aDig_Config(DLIGHT,0);
+    SCALEFAC = 32767 / DEGCUTOFF;
+}
+
+void steer(int mL, int mR)
+{
+    aMotion_SetSetpoint(MLEFT, mL);
+    aMotion_SetSetpoint(MRIGHT, mR);
+}
+
+int read_dinsmore()
+{
+    int h;
+    int ra;
+    int rb;
+    char aflag = 0;
+    char bflag = 0;
+    
+    /* get A and B for current heading */
+    ra=aA2D_ReadInt(CCOMPA);
+    rb=aA2D_ReadInt(CCOMPB);
+    
+    /* convert to heading */
+    h = aMath_Atan2(ra - CTRA, rb - CTRB);
+    
+    return h;
+}
+
+int getHeadingError(int dir0, int dirC)
+{
+    int e;
+    
+    e = dirC - dir0;
+    
+    /* handle wrap-around */
+    if (e < -180) e = e + 360;
+    if (e >  180) e = e - 360;
+    
+    return e;
+}
+
+void track()
+{
+    int d;
+    int e;
+    int h;
+    int emag;
+    int efix;
+    
+    while (1)
+    {
+        h = read_dinsmore();
+        d = aCore_Inporti(aPortRflxCtr);
+        e = getHeadingError(d, h);
+        emag = aMath_Absval(e);
+        
+        if (emag < ERRTHR)
+        {
+            /* on course, green light on, full speed ahead */
+            aDig_Write(DLIGHT, 1);
+            steer(32767, 32767);
+        }
+        else
+        {
+            /* off course, green light off, steer to correct */
+            aDig_Write(DLIGHT,0);
+            
+            /* slow down one motor in proportion to error */
+            efix = emag - ERRTHR;
+            if (efix > DEGCUTOFF) {
+                efix = 0;
+            } else {
+                efix = 32767 - efix * SCALEFAC;
+            }
+            
+            if (e > 0)
+            {
+                /* correct clockwise drift */
+                steer(efix, 32767);
+            }
+            else
+            {
+                /* correct counter-clockwise drift */
+                steer(32767, efix);
+            }
+        }
+    }
+}
+
+void main(char callingProc)
+{
+    int heading;
+    
+    /* initialize and perform hardware test */
+    init();
+    
+    /* get initial heading and save in common RAM */
+    /* other processes can control course by updating this value */
+    heading = read_dinsmore();
+    aCore_Outporti(aPortRflxCtr, heading);
+    
+    /* cruise */
+    track();
+}
+
+#include <aCore.tea>
+#include <aPrint.tea>
+#include <aPad.tea>
+#include <aGPM.tea>
+#include <aMath.tea>
+
+#define aGPS_ADDR (unsigned char)0xD0
+
+#define aGPS_ERR_NONE 0
+#define aGPS_ERR_OVERFLOW 1
+
+#define aGPS_POS_A 0
+#define aGPS_LAT_A 0
+#define aGPS_LAT_DEG_A 0
+#define aGPS_LAT_MIN_A 2
+#define aGPS_LAT_FRAC_A 4
+#define aGPS_LONG_A 6
+#define aGPS_LONG_DEG_A 6
+#define aGPS_LONG_MIN_A 8
+#define aGPS_LONG_FRAC_A 10
+
+#define aGPS_POS_B 12
+#define aGPS_LAT_B 12
+#define aGPS_LAT_DEG_B 12
+#define aGPS_LAT_MIN_B 14
+#define aGPS_LAT_FRAC_B 16
+#define aGPS_LONG_B 18
+#define aGPS_LONG_DEG_B 18
+#define aGPS_LONG_MIN_B 20
+#define aGPS_LONG_FRAC_B 22
+
+#define aGPS_HDOP 26
+#define aGPS_HEADING 28
+#define aGPS_SPEED 30
+
+#define aGPS_ERROR 55
+
+#define aGPS_ErrLat aGPS_SubPosAfromB(90, aGPS_LAT_A, aGPS_LAT_B)
+#define aGPS_ErrLong aGPS_SubPosAfromB(360, aGPS_LONG_A, aGPS_LONG_B)
+
+void aGPS_DumpLatLong(char index)
+{
+    int dlat;
+    int dlong;
+    int s;
+    
+    dlat = aPad_ReadInt(index);
+    dlong = aPad_ReadInt(index + 6);
+    
+    s = 1;
+    if (dlat < 0) s = -1;
+    aPrint_IntDec(dlat);
+    aPrint_Char(':');
+    aPrint_IntDec(s * aPad_ReadInt(index + 2));
+    aPrint_Char(':');
+    aPrint_IntDec(s * aPad_ReadInt(index + 4));
+    aPrint_Char('\n');
+    
+    s = 1;
+    if (dlong < 0) s = -1;
+    aPrint_IntDec(dlong);
+    aPrint_Char(':');
+    aPrint_IntDec(s * aPad_ReadInt(index + 8));
+    aPrint_Char(':');
+    aPrint_IntDec(s * aPad_ReadInt(index + 10));
+    aPrint_Char('\n');
+    
+    aPrint_IntDec(aPad_ReadInt(aGPS_HDOP));
+    aPrint_Char('\n');
+}
+
+void aGPS_AssignCoord(char index, char dir, int deg, int min, int fracmin)
+{
+    if ((dir == 'S') || (dir == 'W')) {
+        deg = -deg;
+        min = -min;
+        fracmin = -fracmin;
+    }
+    aPad_WriteInt(index, deg);
+    aPad_WriteInt(index + 2, min);
+    aPad_WriteInt(index + 4, fracmin);
+}
+
+void aGPS_ReadLatLongGPM(char index)
+{
+    char dir;
+    int d, m, f;
+    
+    d = aGPM_GetLatitudeDegrees(aGPS_ADDR);
+    m = aGPM_GetLatitudeMinutes(aGPS_ADDR);
+    f = aGPM_GetLatitudeFrac(aGPS_ADDR);
+    dir = aGPM_GetLatitudeDirChar(aGPS_ADDR);
+    aGPS_AssignCoord(index, dir, d, m, f);
+    
+    d = aGPM_GetLongitudeDegrees(aGPS_ADDR);
+    m = aGPM_GetLongitudeMinutes(aGPS_ADDR);
+    f = aGPM_GetLongitudeFrac(aGPS_ADDR);
+    dir = aGPM_GetLongitudeDirChar(aGPS_ADDR);
+    aGPS_AssignCoord(index + 6, dir, d, m, f);
+    
+    aPad_WriteInt(aGPS_HDOP, aGPM_GetHDOP(aGPS_ADDR));
+}
+
+int aGPS_SubPosAfromB(int xdeg, char ca, char cb)
+{
+    int da, ma, fa;
+    int db, mb, fb;
+    int d_f;
+    int d_m;
+    int d_d;
+    int val;
+    int sign = 1;
+    char error = 0;
+    
+    // extract coordinates from pad
+    da = aPad_ReadInt(ca);
+    ma = aPad_ReadInt(ca + 2);
+    fa = aPad_ReadInt(ca + 4);
+    db = aPad_ReadInt(cb);
+    mb = aPad_ReadInt(cb + 2);
+    fb = aPad_ReadInt(cb + 4);
+    
+    // subtract fractional minutes
+    // possibly borrow 1000 fractional minutes from minute term
+    d_f = fb - fa;
+    if (d_f < 0) {
+        d_f = 1000 + d_f;
+        mb = mb - 1;
+    }
+    
+    // subtract minutes
+    // possibly borrow 60 minutes from degree term
+    d_m = mb - ma;
+    if (d_m < 0) {
+        d_m = 60 + d_m;
+        db = db - 1;
+    }
+    
+    // subtract degrees
+    // possibly borrow X degrees and set sign flag
+    d_d = db - da;
+    if (da > db) {
+        d_d = xdeg + d_d;
+        sign = -1;
+    }
+    
+    // invert negative result
+    // to make degrees, minutes, fraction all positive
+    if (sign == -1) {
+        d_d = xdeg - d_d - 1;
+        d_m = 59 - d_m;
+        d_f = 1000 - d_f;
+    }
+    
+    // get magnitude of difference in fractional minutes
+    val = (d_f + d_m * 1000) * sign;
+    
+    // more than 32 minutes is overflow
+    // non-zero degrees is overflow
+    if (d_m >= 32) error = aGPS_ERR_OVERFLOW;
+    if (d_d != 0) error = aGPS_ERR_OVERFLOW;
+    aPad_WriteChar(aGPS_ERROR, error);
+    
+    return val;
+}
+
+int aGPS_GetHeadingFromPosErr(int dlat, int dlong)
+{
+    int heading = -1;
+    
+    // divide down values into range for atan function
+    // then convert errors to heading
+    while ((aMath_Absval(dlat) > 1000) || (aMath_Absval(dlong) > 1000)) {
+        dlat = dlat >> 1;
+        dlong = dlong >> 1;
+    }
+    heading = aMath_Atan2(dlong, dlat);
+    
+    return heading;
+}
+
+int aGPS_GetHeadingFromAtoB()
+{
+    int dlong = 0;
+    int dlat = 0;
+    int heading = -1;
+    char error = 0;
+    
+    // get difference
+    dlat = aGPS_ErrLat;
+    error = aPad_ReadChar(aGPS_ERROR);
+    
+    if (!error) {
+        dlong = aGPS_ErrLong;
+        error = aPad_ReadChar(aGPS_ERROR);
+    }
+    
+    if (!error)
+        heading = aGPS_GetHeadingFromPosErr(dlat, dlong);
+    
+    // heading will be -1 if error occurred
+    return heading;
+}
+
+char aGPS_IsNearTarget(int dlat, int dlong, int thr)
+{
+    int r = 0;
+    char retval = 0;
+    
+    // range^2 = dlat^2 + dlong^2
+    // sum of abs val must be less than 180 to prevent overflow
+    // range threshold must also be less than 180
+    
+    if ((aMath_Absval(dlat) + aMath_Absval(dlong)) < 180) {
+        r = dlat*dlat + dlong*dlong;
+        if (r < (thr*thr)) retval = 1;
+    }
+    return retval;
+}
+
+#include <aCore.tea>
+#include <aDig.tea>
+#include <aPrint.tea>
+#include <aMulti.tea>
+#include "gpslib.tea"
+
+#define DTEST 0
+
+int dlat = 0;
+int dlong = 0;
+int pre_dlat = 0;
+int pre_dlong = 0;
+int htarg = 0;
+int hboat = 0;
+
+int waypoint = 0;
+
+void init()
+{
+    char k;
+    char flag = 0;
+    
+    // configure IO
+    aDig_Config(DTEST, ADIG_OUTPUT);
+    
+    // provide some set-up time
+    for (k = 0; k !=5; k++)
+    {
+        aDig_Write(DTEST, 1);
+        aCore_Sleep(10000);
+        aDig_Write(DTEST, 0);
+        aCore_Sleep(10000);
+    }
+    
+    // wait for GPS acquisition
+    while (1)
+    {
+        flag = aGPM_GetPosFoundFlag(aGPS_ADDR);
+        if (flag) break;
+        aDig_Write(DTEST, 1);
+        aCore_Sleep(1000);
+        aDig_Write(DTEST, 0);
+        aCore_Sleep(1000);
+    }
+}
+
+void delay(char tsec)
+{
+    char c;
+    for (c = 0; c != tsec; c++) {
+        aCore_Sleep(10000);
+    }
+}
+
+void nextWaypoint()
+{
+    switch (waypoint)
+    {
+        case 0:
+            // cross lake
+            aGPS_AssignCoord(aGPS_LAT_B, 'N', 40, 3, 738);
+            aGPS_AssignCoord(aGPS_LONG_B, 'W',105, 12, 20);
+            break;
+        case 1:
+            // reservoir drain
+            aGPS_AssignCoord(aGPS_LAT_B, 'N', 40, 3, 814);
+            aGPS_AssignCoord(aGPS_LONG_B, 'W',105, 11, 888);
+            break;
+        case 2:
+            // cross lake
+            aGPS_AssignCoord(aGPS_LAT_B, 'N', 40, 3, 738);
+            aGPS_AssignCoord(aGPS_LONG_B, 'W',105, 12, 20);
+            break;
+        case 3:
+            // tree landing
+            aGPS_AssignCoord(aGPS_LAT_B, 'N', 40, 3, 681);
+            aGPS_AssignCoord(aGPS_LONG_B, 'W',105, 11, 868);
+            break;
+        case 4:
+        default:
+            // home
+            aGPS_AssignCoord(aGPS_LAT_B, 'N', 40, 3, 786);
+            aGPS_AssignCoord(aGPS_LONG_B, 'W',105, 11, 796);
+            break;
+    }
+    
+    waypoint++;
+}
+
+
+void navCalc()
+{
+    int qlat = 0;
+    int qlong = 0;
+    
+    // get offsets to target (waypoint B)
+    dlat = aGPS_ErrLat;
+    dlong = aGPS_ErrLong;
+    
+    // get difference between last two offsets to target
+    // (equivalent to offset between two latest boat positions)
+    // use this value to estimate current heading
+    qlat = pre_dlat - dlat;
+    qlong = pre_dlong - dlong;
+    
+    // update previous offset to target
+    pre_dlat = dlat;
+    pre_dlong = dlong;
+    
+    // if there are non-zero offsets then
+    // calculate heading to target
+    // and calculate change in heading of boat
+    htarg = -1;
+    hboat = -1;
+    if (dlat || dlong)
+        htarg = aGPS_GetHeadingFromPosErr(dlat, dlong);
+    if (qlat || qlong)
+        hboat = aGPS_GetHeadingFromPosErr(qlat, qlong);
+}
+
+int courseError()
+{
+    int e = 0;
+    int eabs = 0;
+    int rail = 45;
+    
+    // check for valid heading data
+    // invalid data will just propagate zero error
+    if ((hboat >= 0) &amp;&amp; (htarg >= 0))
+    {
+        e = htarg - hboat;
+    }
+    
+    // handle wrap-around
+    if (e < -180) e = e + 360;
+    if (e >  180) e = e - 360;
+    
+    // and apply limit
+    if (e >  rail) e = rail;
+    if (e < -rail) e = -rail;
+    
+    // find absolute heading error
+    eabs = aMath_Absval(e);
+    
+    // within 5 degrees (-2,-1,0,1,2) just go straight
+    // otherwise make course correction
+    if (eabs < 3) e = 0;
+    
+    return e;
+}
+
+void main()
+{
+    int failsafe = 0;
+    int course = 0;
+    int adjust = 0;
+    int e = 0;
+    int eabs = 0;
+    
+    init();
+    
+    // assign target
+    nextWaypoint();
+    
+    // initialize target vector
+    // initialize turn time
+    aGPS_ReadLatLongGPM(aGPS_POS_A);
+    navCalc();
+    
+    // spawn compass guidance process
+    aMulti_Spawn(0, 1);
+    
+    // make a position check and course correction
+    // after several seconds of straight travel
+    while (1)
+    {
+        // start with new waypoint after 5 minutes
+        // then new waypoint when 40 units (roughly 200 ft) from target
+        // lock on compass course after 100 minutes
+        if (failsafe == 15) nextWaypoint();
+        if (aGPS_IsNearTarget(dlat, dlong, 40)) nextWaypoint();
+        if (failsafe == 300) break;
+        failsafe++;
+        
+        // straight travel for several seconds
+        delay(20);
+        
+        // do a nav computation if position valid
+        if (aGPM_GetPosFoundFlag(aGPS_ADDR))
+        {
+            aDig_Write(DTEST, 1);
+            aGPS_ReadLatLongGPM(aGPS_POS_A);
+            navCalc();
+            
+            e = courseError();
+            eabs = aMath_Absval(e);
+            course = aCore_Inporti(aPortRflxCtr);
+            
+            adjust = 30;
+            if (eabs < 40) adjust = 20;
+            if (eabs < 30) adjust = 10;
+            if (eabs < 10) adjust = 5;
+            
+            if (e < 0) {
+                course = course - adjust;
+            } else {
+                course = course + adjust;
+            }
+            
+            aCore_Outporti(aPortRflxCtr, (course + 360) % 360);
+            aDig_Write(DTEST, 0);
+        }
+    }
+    
+    // indicate failsafe activated
+    while (1)
+    {
+        aDig_Write(DTEST, 1);
+        aCore_Sleep(500);
+        aDig_Write(DTEST, 0);
+        aCore_Sleep(2000);
+    }
+    
+}
+
+steep "gps"
+load "gpsb" 4 0
+load "gps" 4 11
+4 18 15 11 /* cmdVAL_SET, VM Bootstrap file slot 11 */
+4 19       /* cmdVAL_SAV, save settings to EEPROM */
