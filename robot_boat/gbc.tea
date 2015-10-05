@@ -1,0 +1,137 @@
+/* compass guided boat program */
+/* uses Dinsmore 1525 2-channel analog compass with */
+/* sine-cosine outputs, 2.5V average with +-0.4V swing */
+
+#include <aCore.tea>
+#include <aDig.tea>
+#include <aA2D.tea>
+#include <aMath.tea>
+#include <aMotion.tea>
+#include <aPrint.tea>
+
+#define DLIGHT 7 /* compass tracking light control */
+
+#define MLEFT 0 /* motor assignments */
+#define MRIGHT 1
+
+#define CCOMPA 1 /* analog inputs A and B from compass */
+#define CCOMPB 0
+
+#define CTRA 520 /* compass center points */
+#define CTRB 520 /* (determined manually) */
+
+#define ERRTHR 2 /* 3 degree (-1 to 1) heading error threshold */
+
+int SCALEFAC = 0;
+int DEGCUTOFF = 25;
+
+void init()
+{
+    /* configure outputs */
+    /* IO pin must be configured after motion stuff */
+    aMotion_SetMode(MLEFT, aMOTION_MODE_PWM, 0);
+    aMotion_SetMode(MRIGHT, aMOTION_MODE_PWM, 0);
+    aDig_Config(DLIGHT,0);
+    SCALEFAC = 32767 / DEGCUTOFF;
+}
+
+void steer(int mL, int mR)
+{
+    aMotion_SetSetpoint(MLEFT, mL);
+    aMotion_SetSetpoint(MRIGHT, mR);
+}
+
+int read_dinsmore()
+{
+    int h;
+    int ra;
+    int rb;
+    char aflag = 0;
+    char bflag = 0;
+    
+    /* get A and B for current heading */
+    ra=aA2D_ReadInt(CCOMPA);
+    rb=aA2D_ReadInt(CCOMPB);
+    
+    /* convert to heading */
+    h = aMath_Atan2(ra - CTRA, rb - CTRB);
+    
+    return h;
+}
+
+int getHeadingError(int dir0, int dirC)
+{
+    int e;
+    
+    e = dirC - dir0;
+    
+    /* handle wrap-around */
+    if (e < -180) e = e + 360;
+    if (e >  180) e = e - 360;
+    
+    return e;
+}
+
+void track()
+{
+    int d;
+    int e;
+    int h;
+    int emag;
+    int efix;
+    
+    while (1)
+    {
+        h = read_dinsmore();
+        d = aCore_Inporti(aPortRflxCtr);
+        e = getHeadingError(d, h);
+        emag = aMath_Absval(e);
+        
+        if (emag < ERRTHR)
+        {
+            /* on course, green light on, full speed ahead */
+            aDig_Write(DLIGHT, 1);
+            steer(32767, 32767);
+        }
+        else
+        {
+            /* off course, green light off, steer to correct */
+            aDig_Write(DLIGHT,0);
+            
+            /* slow down one motor in proportion to error */
+            efix = emag - ERRTHR;
+            if (efix > DEGCUTOFF) {
+                efix = 0;
+            } else {
+                efix = 32767 - efix * SCALEFAC;
+            }
+            
+            if (e > 0)
+            {
+                /* correct clockwise drift */
+                steer(efix, 32767);
+            }
+            else
+            {
+                /* correct counter-clockwise drift */
+                steer(32767, efix);
+            }
+        }
+    }
+}
+
+void main(char callingProc)
+{
+    int heading;
+    
+    /* initialize and perform hardware test */
+    init();
+    
+    /* get initial heading and save in common RAM */
+    /* other processes can control course by updating this value */
+    heading = read_dinsmore();
+    aCore_Outporti(aPortRflxCtr, heading);
+    
+    /* cruise */
+    track();
+}
