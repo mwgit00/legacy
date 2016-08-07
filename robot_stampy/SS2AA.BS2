@@ -113,23 +113,6 @@ FUZE	var	ins.bit14	' candle fuze
 
 READY:
 
-'goto COMMENCE
-
-'shit:
-'serin LINK,N2400,[WAIT(ACK)]
-'fuck:
-'gosub sr_irtest
-'goto fuck
-'FOOBAR:
-'	serin LINK,N2400,[WAIT(ACK)]
-'	for i=1 to 8
-'		gosub sr_walk_hall
-'	next
-'	serout LINK,N2400,[RSTRT,0,0]
-'	goto FOOBAR
-'end
-
-
 	doseek=false
 	dorotate=false
 
