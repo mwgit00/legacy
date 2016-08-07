@@ -116,11 +116,11 @@ READY:
 
 goto COMMENCE
 
-'shit:
+'test1:
 'serin LINK,N2400,[WAIT(ACK)]
-'fuck:
+'test2:
 'gosub sr_irtest
-'goto fuck
+'goto test2
 FOOBAR:
 	serin LINK,N2400,[WAIT(ACK)]
 	for i=1 to 8
