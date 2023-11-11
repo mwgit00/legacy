@@ -1,0 +1,7 @@
+proj1
+OpenSSL 1.1.1 
+
+ openssl aes-256-cbc -in private_proj1.zip -out private_proj1.bin -k <password>
+ 
+ openssl aes-256-cbc -d -in private_proj1.bin -out x.zip -k <password>
+ 
