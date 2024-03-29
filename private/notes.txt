@@ -6,3 +6,7 @@ Used OpenSSL 1.1.1c  28 May 2019
  openssl aes-256-cbc -in private_proj2.zip -out private_proj2.bin -k <password>
  openssl aes-256-cbc -d -in private_proj2.bin -out private_proj2.zip -k <password>
  
+On MacOS, with LibreSSL 2.8.3, this does not work.
+Use 7-Zip decryption of private.zip instead.
+
+Hint:  What time is it?
